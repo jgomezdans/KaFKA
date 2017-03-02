@@ -15,44 +15,53 @@ def spsolve2(a, b):
         out[j,j] = a_lu.solve(bb)[j]
     return out.tocsr()
 
-def matrix_squeeze (A, mask=None, n_params=1):
-    """The matrix A is squeezed out of 0-filled submatrices. We return a
-    squeezed version of the original matrix, as well as the locations of the
-    non-zero elements that enable a reconstruction from the squeezed version.
 
+def matrix_squeeze (a_matrix, mask=None, n_params=1):
+    """The matrix A is squeezed out of 0-filled submatrices, or rows/cols where
+     a 1D mask indicates False. We return a squeezed version of the original
+     matrix.
     Parameters
     ----------
-    A: array
-        An N*N matrix, ideally sparse (hence the "!=" comparison). The matrix
-        is assumed to be block diagonal, with some blocks along the diagonal
-        set to 0.
-
+    a_matrix: array
+        An N,N array, or an N array. We assume that if no mask is given, we want
+        to squeeze out all the zero locations
+    mask: array
+        An N boolean array, indicating where to squeeze the original array
+    n_params: integer
+        The number of parameters in the state vector. So for an identity o
+        operator this will be 1, for the kernels 3, for TIP, 7, ...
     Returns
     -------
-    The squeezed matrix, as well as a Boolean array that allows to reconstruct
-    the original matrix with zero padding.
+    The squeezed matrix.
     """
-    n = mask.sum()
-    A_squeeze = sp.csr_matrix((n,n))
     if mask is None:
-        # A needs to be CSR or something...
-        rows, columns, values = sp.find(A)
-        A_squeeze = A[rows, :][:, cols]
+        # a needs to be a sparse matrix, otherwise find doesn't work!
+        rows, columns, values = sp.find(a_matrix)
+        # We can now squeeze easily using slicing of the original matrix
+        a_matrix_squeezed = a_matrix[rows, :][:, columns]
     else:
-
+        # Calculate the size of the output array from the non-zero mask elements
+        n = mask.sum()
+        a_matrix_squeezed = sp.csr_matrix((n, n))
         m = np.array([], dtype=np.bool)
+        # the next if statement is there to cope with problems where the size of
+        # the state has more than one parameter
         if n_params > 1:
+            # We need to stack the masks in this case
             for i in xrange(n_params):
                 m = np.r_[m, mask]
         else:
+            # We don't stack the masks, as there's only one parameter
             m = mask
-        if A.ndim == 2:
-            A_squeeze = A[m, :][:, m]
-        elif A.ndim == 1: # vector
-            A_squeeze = np.zeros(n_params*n)
-            A_squeeze = A[m]
-
-    return A_squeeze
+        # This is different for vector and matrix
+        if a_matrix.ndim == 2:
+            # Just subset by mask location in rows/cols
+            a_matrix_squeezed = a_matrix[m, :][:, m]
+        elif a_matrix.ndim == 1: # vector
+            # Same, but just in one dimension
+            a_matrix_squeezed = np.zeros(n_params*n)
+            a_matrix_squeezed = a_matrix[m]
+    return a_matrix_squeezed
 
 
 def reconstruct_array(A, B, mask, n_params=1):
