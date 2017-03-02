@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Some utility functions used by the main code base."""
+
 # KaFKA A fast Kalman filter implementation for raster based datasets.
 # Copyright (c) 2017 J Gomez-Dans. All rights reserved.
 #
@@ -88,19 +89,34 @@ def matrix_squeeze (a_matrix, mask=None, n_params=1):
     return a_matrix_squeezed
 
 
-def reconstruct_array(A, B, mask, n_params=1):
-    """We have an array A which is a subset of B. We want to update B with the
-    elements of A, which are given where mask is true"""
+def reconstruct_array(a_matrix, b_matrix, mask, n_params=1):
+    """A function to fill in a squeezed array (a_matrix) with elements from a
+    complete array (b_matrix). In effect, the elements of the b_matrix where the
+    mask is True will be updated with the elements of a_matrix that correspond.
+    The function works both on vectors and matrices, and they need to be
+    ordered.
+    Parameters
+    -----------
+    a_matrix: array
+        The squeezed matrix with the updated elements
+    b_matrix: array
+        The full matrix that needs updating
+    mask: array
+        The location of the elements that need to be updated
+    n_params: integer
+        The number of parameters in the state
+    Returns
+    --------
+    The updated `b_matrix`"""
 
     mask = mask.ravel()
-    if A.ndim == 1:
+    if a_matrix.ndim == 1:
         n = mask.shape[0] # big dimension
         n_good = mask.sum()
         ilocs = mask.nonzero()[0]
         for i in xrange(n_params):
-            B[ilocs +i*n] = A[(i*n_good):((i+1)*n_good)]
-        return B
-    elif A.ndim == 2:
+            b_matrix[ilocs +i*n] = a_matrix[(i*n_good):((i+1)*n_good)]
+    elif a_matrix.ndim == 2:
         n = mask.shape[0] # big dimension
         n_good = mask.sum()
         ilocs = mask.nonzero()[0]
@@ -108,41 +124,7 @@ def reconstruct_array(A, B, mask, n_params=1):
             ii = 0
             for j in xrange(n):
                 if mask[j]:
-                    B[j + i*n, i*n + ilocs] = A[ii, (i*n_good):((i+1)*n_good)]
-                    ii = ii+1
-        return B
-
-
-def matrix_reconstruct (A, mask, n_params=1):
-    """Reconstruct an "squeezed" matrix to full size, where we have the
-    locations of the non-zero elements in the original matrix.
-
-    Parameters
-    ----------
-    A: array
-        A N_squeeze*N_squeeze array or sparse matrix
-    no_zeros: array
-        An array of booleans of size N (where N >= N_squeeze) that has the
-        locations of the data points in the full matrix representation
-
-    Returns
-    --------
-    A sparse matrix
-    """
-    if n_params==1:
-        # Square matrix
-        n = mask.shape[0]
-        locs = mask.nonzero()[0]
-        rows_squeeze, cols_squeeze, values = sp.find(A)
-        reconstruct = sp.csr_matrix( (values, (locs, locs)), shape=(n,n),dtype=np.float32 )
-        return reconstruct
-    else:
-        # A.shape[1]*3 == A.shape[0]
-        n = mask.shape[0]
-        locs = mask.nonzero()[0]
-        rows_squeeze, cols_squeeze, values = sp.find(A)
-        reconstruct = sp.csr_matrix( (values, (locs, locs)), shape=(n_params*n,n),dtype=np.float32 )
-        return reconstruct
-
-
-    #return sp.lil_matrix(reconstruct)
+                    b_matrix[j + i*n, i*n + ilocs] = a_matrix[ii,
+                                                     (i*n_good):((i+1)*n_good)]
+                    ii += 1
+    return b_matrix
