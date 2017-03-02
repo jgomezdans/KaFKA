@@ -2,23 +2,23 @@
 """A fast Kalman filter implementation designed with raster data in mind. This
 implementation basically performs a very fast update of the filter."""
 
-# kalmante A fast Kalman filter implementation for raster based datasets.
+# KaFKA A fast Kalman filter implementation for raster based datasets.
 # Copyright (c) 2017 J Gomez-Dans. All rights reserved.
 #
-# This file is part of kalmante.
+# This file is part of KaFKA.
 #
-# kalmante is free software: you can redistribute it and/or modify
+# KaFKA is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# kalmante is distributed in the hope that it will be useful,
+# KaFKA is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with kalmante.  If not, see <http://www.gnu.org/licenses/>.
+# along with KaFKA.  If not, see <http://www.gnu.org/licenses/>.
 
 __author__ = "J Gomez-Dans"
 __copyright__ = "Copyright 2017 J Gomez-Dans"

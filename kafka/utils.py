@@ -1,5 +1,29 @@
 #!/usr/bin/env python
 """Some utility functions used by the main code base."""
+# KaFKA A fast Kalman filter implementation for raster based datasets.
+# Copyright (c) 2017 J Gomez-Dans. All rights reserved.
+#
+# This file is part of KaFKA.
+#
+# KaFKA is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# KaFKA is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with KaFKA.  If not, see <http://www.gnu.org/licenses/>.
+
+__author__ = "J Gomez-Dans"
+__copyright__ = "Copyright 2017 J Gomez-Dans"
+__version__ = "1.0 (09.03.2017)"
+__license__ = "GPLv3"
+__email__ = "j.gomez-dans@ucl.ac.uk"
+
 
 import numpy as np
 import scipy.sparse as sp
