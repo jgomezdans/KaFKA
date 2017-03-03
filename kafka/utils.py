@@ -66,6 +66,8 @@ def matrix_squeeze (a_matrix, mask=None, n_params=1):
         a_matrix_squeezed = a_matrix[rows, :][:, columns]
     else:
         # Calculate the size of the output array from the non-zero mask elements
+        if mask.ndim == 2: 
+            mask = mask.ravel()
         n = mask.sum()
         a_matrix_squeezed = sp.csr_matrix((n, n))
         m = np.array([], dtype=np.bool)
