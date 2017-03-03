@@ -29,7 +29,7 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 from collections import namedtuple
 
 import numpy as np
-from scipy.ndimage import zoom
+from geoh5 import kea
 
 from linear_kernels_kf import KernelLinearKalman
 
@@ -63,28 +63,26 @@ class MODISKernelLinearKalman (KernelLinearKalman):
 
         Returns
         -------
-        rho, R_mat, mask.ravel(), metadata
+        rho, R_mat, mask, metadata
         """
-
+        
         QA_OK = np.array([8, 72, 136, 200, 1032, 1288, 2056, 2120, 2184, 2248])
         qa = self.observations.qa.GetRasterBand(timestep+1).ReadAsArray()
-        mask = np.in1d(qa, QA_OK)
-        # Resample to 500m
-        mask = zoom(mask.reshape((1200,1200)), 2, order=0)
+        mask = np.in1d(qa, QA_OK).reshape((2400,2400))
         sza = self.observations.sza.GetRasterBand(timestep + 1).ReadAsArray()
         vza = self.observations.vza.GetRasterBand(timestep + 1).ReadAsArray()
         saa = self.observations.saa.GetRasterBand(timestep + 1).ReadAsArray()
         vaa = self.observations.vaa.GetRasterBand(timestep + 1).ReadAsArray()
         raa = vaa - saa
-        vza = zoom(vza/100., 2, order=0)
-        sza = zoom(sza/100., 2, order=0)
-        raa = zoom(raa/100., 2, order=0)
-
-        rho_pntr = self.observations["b%02d"%band]
+        rho_pntr = self.observations[5 + band]
         rho = rho_pntr.GetRasterBand(timestep+1).ReadAsArray()/10000.
         # Taken from http://modis-sr.ltdri.org/pages/validation.html
         modis_uncertainty=np.array([0.005, 0.014, 0.008, 0.005, 0.012,
                                     0.006, 0.003])
         R_mat = self.create_uncertainty(modis_uncertainty[band], mask)
-        metadata = Metadata(mask, modis_uncertainty[band], vza, sza, raa)
-        return rho, R_mat, mask.ravel(), metadata
+        metadata = Metadata(mask, modis_uncertainty[band], 
+                            vza/100., sza/100., raa/100.)
+        return rho, R_mat, mask, metadata
+
+
+        
