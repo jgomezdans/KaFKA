@@ -20,17 +20,17 @@ implementation basically performs a very fast update of the filter."""
 # You should have received a copy of the GNU General Public License
 # along with KaFKA.  If not, see <http://www.gnu.org/licenses/>.
 
-__author__ = "J Gomez-Dans"
-__copyright__ = "Copyright 2017 J Gomez-Dans"
-__version__ = "1.0 (09.03.2017)"
-__license__ = "GPLv3"
-__email__ = "j.gomez-dans@ucl.ac.uk"
-
 from collections import namedtuple
 import numpy as np
 import scipy.sparse as sp
 
 from utils import  matrix_squeeze, spsolve2, reconstruct_array
+
+__author__ = "J Gomez-Dans"
+__copyright__ = "Copyright 2017 J Gomez-Dans"
+__version__ = "1.0 (09.03.2017)"
+__license__ = "GPLv3"
+__email__ = "j.gomez-dans@ucl.ac.uk"
 
 Metadata = namedtuple('Metadata', 'mask uncertainty')
 

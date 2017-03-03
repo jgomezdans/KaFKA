@@ -81,6 +81,8 @@ if __name__ == "__main__":
     metadata = []
     obs_time = []
     b2 = []
+    n = 1500
+
     for ii,fname in enumerate(files):
         if ii > 5:
             break
@@ -88,7 +90,7 @@ if __name__ == "__main__":
         obs_time.append(the_date)
         g = gdal.Open(('HDF4_EOS:EOS_GRID:"{0}":' +
                       'MODIS_Grid_500m_2D:sur_refl_b02_1').format(fname))
-        b2.append(g.ReadAsArray()[:250,:250]/10000.)
+        b2.append(g.ReadAsArray()[:n,:n]/10000.)
         g = gdal.Open(('HDF4_EOS:EOS_GRID:"{0}":' +
                       ':MODIS_Grid_1km_2D:state_1km_1').format(fname))
         qa = g.ReadAsArray()
@@ -113,8 +115,8 @@ if __name__ == "__main__":
         sza = scipy.ndimage.zoom(sza, 2, order=0)
         raa = scipy.ndimage.zoom(raa, 2, order=0)
         # Lump into metadata container
-        metadata.append(Metadata(mask[:250,:250], 0.015, vza[:250,:250],
-                                 sza[:250,:250], raa[:250,:250]))
+        metadata.append(Metadata(mask[:n,:n], 0.015, vza[:n,:n],
+                                 sza[:n,:n], raa[:n,:n]))
         #metadata.mask.append ( mask )
         #metadata.sza.append(sza)
         #metadata.vza.append(vza)
@@ -122,17 +124,17 @@ if __name__ == "__main__":
 
     obs_time = np.array(obs_time)
     #metadata = Metadata(mask, 0.015, vza, sza, raa)
-    output_array=np.zeros((20,3, 250,250))
-    output_unc= np.zeros((20, 3,250, 250))
+    output_array=np.zeros((20,3, n, n))
+    output_unc= np.zeros((20, 3, n, n))
     kalman_filter = KernelLinearKalman(np.array(b2), obs_time, metadata,
                                        output_array,
                                        output_unc)
     kalman_filter.set_trajectory_model()
-    Q = np.ones(250*250*3)*.005
-    Q[:250*250] *= 10.# isotropic has more model noise
+    Q = np.ones(n*n*3)*.005
+    Q[:(n*n)] *= 1.# isotropic has more model noise
     kalman_filter.set_trajectory_uncertainty(Q)
-    n = 250*250
-    x_f = 0.5 * np.ones(3*n).ravel()
-    P_f = sp.eye(3*n, 3*n, format="csc", dtype=np.float32)
+
+    x_f = 0.5 * np.ones(3*n*n).ravel()
+    P_f = sp.eye(3*n*n, 3*n*n, format="csc", dtype=np.float32)
 
     kalman_filter.run(x_f, P_f, refine_diag=False)
