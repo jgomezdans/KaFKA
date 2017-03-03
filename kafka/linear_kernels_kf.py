@@ -31,11 +31,15 @@ from collections import namedtuple
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.sparse as sp
+from scipy.ndimage import zoom
 import kernels
 from linear_kf import LinearKalman
 
 # metadata is now different as it has angles innit
 Metadata = namedtuple('Metadata', 'mask uncertainty vza sza raa')
+MODIS_observations = namedtuple('MODIS_observations',
+                        'doys qa vza sza saa vaa b01 b02 b03 b04 b05 b06 b07')
+
 
 
 class KernelLinearKalman (LinearKalman):

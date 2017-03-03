@@ -84,7 +84,6 @@ class LinearKalman (object):
             self.output_unc[step, :, :] = P_analysis.diagonal().reshape(
                 self.output.shape[1:])
 
-
     def _get_observations_timestep(self, timestep, band=None):
         """A method that returns the observations, mask and uncertainty for a
         particular timestep. It is envisaged that applications will specialise
@@ -101,7 +100,8 @@ class LinearKalman (object):
 
         Returns
         -------
-        Observations (N*N), uncertainty (N*N) and mask (N*N) arrays
+        Observations (N*N), uncertainty (N*N) and mask (N*N) arrays, as well
+        as relevant metadata
         """
         # Start with the mask
         mask = self.metadata[timestep].mask
@@ -115,7 +115,8 @@ class LinearKalman (object):
             observations = self.observations[timestep][band]
             R_mat = self.create_uncertainty(
                 self.metadata[timestep].uncertainty[band], mask)
-        return observations, R_mat, mask.ravel()
+
+        return observations, R_mat, mask.ravel(), self.metadata[timestep]
 
     def set_trajectory_model(self):
         """In a Kalman filter, the state is progated from time `t` to `t+1`
@@ -174,13 +175,13 @@ class LinearKalman (object):
         is_first = True
         for ii,timestep in enumerate(np.arange(self.observation_times.min(),
                                   self.observation_times.max() + 1)):
-            # First locate all available observations for the time step of interest.
+            # First locate all available observations for time step of interest.
             # Note that there could be more than one...
             locate_times = [i for i, x in enumerate(self.observation_times)
                         if x == timestep]
 
             if not is_first:
-                x_forecast, P_forecast = self.advance ( x_analysis, P_analysis)
+                x_forecast, P_forecast = self.advance(x_analysis, P_analysis)
             is_first = False
             if len(locate_times) == 0:
                 # Just advance the time
@@ -195,7 +196,7 @@ class LinearKalman (object):
 
             self._dump_output(ii, timestep, x_analysis, P_analysis)
 
-    def assimilate ( self, locate_times, x_forecast, P_forecast,
+    def assimilate(self, locate_times, x_forecast, P_forecast,
                    band=None, approx_diagonal=True, refine_diag=False,
                    iter_obs_op=False, is_robust=False):
         """The method assimilates the observatins at timestep `timestep`, using
@@ -205,8 +206,8 @@ class LinearKalman (object):
         for step in locate_times:
             print step
             # Extract observations, mask and uncertainty for the current time
-            observations, R_mat, mask = self._get_observations_timestep(step,
-                                                                        band)
+            observations, R_mat, mask, metadata = \
+                self._get_observations_timestep(step, band)
             # The assimilation works if data is there, so we need to reduce the
             # rank of the matrices by ignoring the masked data. `matrix_squeeze`
             # helps with this...
@@ -220,8 +221,8 @@ class LinearKalman (object):
             # linear, then no iterations are needed.
 
             while True:
-                H_matrix = self.create_observation_operator (
-                    self.metadata[step], x_forecast )
+                H_matrix = self.create_observation_operator(the_metadata,
+                                                              x_forecast )
                 # At this stage, we have a forecast (prior), the observations
                 # and the observation operator, so we proceed with the
                 # assimilation
