@@ -27,9 +27,14 @@ __license__ = "GPLv3"
 __email__ = "j.gomez-dans@ucl.ac.uk"
 
 from collections import namedtuple
+import os
 
+import scipy.sparse as sp
+import matplotlib.pyplot as plt
 import numpy as np
+
 from geoh5 import kea
+import gdal
 
 from linear_kernels_kf import KernelLinearKalman
 
@@ -85,4 +90,44 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         return rho, R_mat, mask, metadata
 
 
+
+
+
+if __name__ == "__main__":
+    the_dir="/storage/ucfajlg/Aurade_MODIS/"
+    g = gdal.Open(the_dir + "brdf_2010_b01.vrt")
+    days = np.array([int(g.GetRasterBand(i+1).GetMetadata()['DoY'])
+                            for i in xrange(g.RasterCount)])
+    geoT = g.GetGeoTransform()
+    srs = g.GetProjectionRef()
+    n_times = 365
+    kwargs = {'width': 2400,
+          'height': 2400,
+          'count': n_times,
+          'transform': geoT,
+          'crs': srs,
+          'compression': 9,
+          'chunks': (1200, 1200),
+          'blocksize': 1200,
+           'dtype': "float32"}
+    
+    modis_obs = MODIS_observations( days,
+                gdal.Open(os.path.join(the_dir, "statekm_2010.vrt")),
+                gdal.Open(os.path.join(the_dir, "SensorZenith_2010.vrt")),
+                gdal.Open(os.path.join(the_dir, "SolarZenith_2010.vrt")),
+                gdal.Open(os.path.join(the_dir, "SolarAzimuth_2010.vrt")),
+                gdal.Open(os.path.join(the_dir, "SensorAzimuth_2010.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2010_b01.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2010_b02.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2010_b03.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2010_b04.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2010_b05.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2010_b06.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2010_b07.vrt")))
+
+    kf = MODISKernelLinearKalman( modis_obs, days, [], [] )
+    n = 2400
+    x_forecast = np.ones(3*2400*2400)*0.5
+    P_forecast = sp.eye(3*n*n, 3*n*n, format="csc", dtype=np.float32)
+    kf.run(x_forecast, P_forecast, band=2, refine_diag=False)
         
