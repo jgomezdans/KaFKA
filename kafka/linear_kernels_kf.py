@@ -80,7 +80,7 @@ if __name__ == "__main__":
     import scipy.ndimage
     import glob
 
-    files = glob.glob("/tmp/MOD09*hdf")
+    files = glob.glob("/storage/ucfajlg/Aurade_MODIS/TERRA/2010/MOD09*hdf")
     files.sort()
     metadata = []
     obs_time = []
