@@ -206,7 +206,7 @@ class LinearKalman (object):
         for step in locate_times:
             print step
             # Extract observations, mask and uncertainty for the current time
-            observations, R_mat, mask, metadata = \
+            observations, R_mat, mask, the_metadata = \
                 self._get_observations_timestep(step, band)
             # The assimilation works if data is there, so we need to reduce the
             # rank of the matrices by ignoring the masked data. `matrix_squeeze`
@@ -250,16 +250,16 @@ class LinearKalman (object):
                     kalman_gain1 = P_forecast_prime.dot (XX)
 
 
-                x_forecast_prime = matrix_squeeze(x_forecast, mask=mask,
+                x_forecast_prime = matrix_squeeze(x_forecast, mask=mask.ravel(),
                                                   n_params=self.n_params)
                 x_analysis_prime = x_forecast_prime + \
-                                   kalman_gain*(observations.ravel()[mask] - \
+                                   kalman_gain*(observations.ravel()[mask.ravel()] - \
                                        H_matrix.dot(x_forecast_prime))
                 P_analysis_prime = ((sp.eye(kalman_gain.shape[0], kalman_gain.shape[0])
                                - kalman_gain*H_matrix)*P_forecast_prime)
                 # Now move
                 x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
-                                                 mask, n_params=self.n_params)
+                                                 mask.ravel(), n_params=self.n_params)
                 small_diagonal = np.array(P_analysis_prime.diagonal()).squeeze()
                 big_diagonal = np.array(P_forecast.diagonal()).squeeze()
                 P_analysis_diag = reconstruct_array(small_diagonal, big_diagonal,
