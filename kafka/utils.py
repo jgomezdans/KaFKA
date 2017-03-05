@@ -29,6 +29,10 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as spl
+import netCDF4
+import datetime as dt
+import os
+import gdal
 
 
 def spsolve2(a, b):
@@ -130,3 +134,200 @@ def reconstruct_array(a_matrix, b_matrix, mask, n_params=1):
                                                      (i*n_good):((i+1)*n_good)]
                     ii += 1
     return b_matrix
+
+
+class OutputFile(object):
+    """A netCDF4 class for saving output data. This class requires both the
+    netCDF4 bindings, as well as the GDAL ones, as the class can take a GDAL
+    projection to store it in the netCDF using CF-1.7. Lifted shamelessly from
+    my eoldas code."""
+    def __init__(self, fname, times=None, input_file=None,
+                 basedate=dt.datetime(1970, 1, 1, 0, 0, 0),
+                 x=None, y=None):
+        """
+
+        Parameters
+        ----------
+        fname : str
+            A filename for the netCDF4 file.
+        times : None
+            Either None (default), or a list of datetime objects containing the
+            dates of the data. The time axis of the data will be based on these.
+            so you must prescribe the time before you save the data.
+        input_file : str
+            You can use a GDAL object (fully georeferenced) to copy the
+            dimensions and projection.
+        basedate : datetime
+            The starting date, an arcane concept from netCDF.
+        x : None or array
+            A list of eastings if not passing an `input_file`.
+        y : None or array
+            A list of northings if not passing an `input_file`.
+        """
+        self.fname = fname
+        self.basedate = basedate
+
+        self.create_netcdf(times)
+
+        if x is not None and y is not None:
+            self.nc.createDimension('x', len(x))
+            self.nc.createDimension('y', len(y))
+
+            xo = self.nc.createVariable('x', 'f4', ('x'))
+            xo.units = 'm'
+            xo.standard_name = 'projection_x_coordinate'
+
+            yo = self.nc.createVariable('y', 'f4', ('y'))
+            yo.units = 'm'
+            xo[:] = x
+            yo[:] = y
+
+        if input_file is not None:
+            self._get_spatial_metadata(input_file)
+            self.create_spatial_domain()
+
+    def _get_spatial_metadata(self, geofile):
+        """
+        Gets (and sets!) the spatial metadata from a GDAL file
+        Parameters
+        ----------
+        geofile : str
+            The GDAL file. You might need to give a full path and what not...
+
+        Returns
+        -------
+        Nuffink
+        """
+        g = gdal.Open(geofile)
+        if g is None:
+            raise IOError("File %s not readable by GDAL" % geofile)
+        ny, nx = g.RasterYSize, g.RasterXSize
+        geo_transform = g.GetGeoTransform()
+        self.x = np.arange(nx) * geo_transform[1] + geo_transform[0]
+        self.y = np.arange(ny) * geo_transform[5] + geo_transform[3]
+        self.nx = nx
+        self.ny = ny
+        self.wkt = g.GetProjectionRef()
+
+    def create_netcdf(self, times=None):
+        """
+        Creates our beloved netCDF file. Can also take an optional array of
+        times.
+
+        Parameters
+        ----------
+        times :
+
+        Returns
+        -------
+
+        """
+        self.nc = netCDF4.Dataset(self.fname, 'w', clobber=True)
+
+        self.nc.createDimension('scalar', None)
+
+        # create dimensions, variables and attributes:
+        if times is None:
+            self.nc.createDimension('time', None)
+        else:
+            self.nc.createDimension('time', len(times))
+        timeo = self.nc.createVariable('time', 'f4', ('time'))
+        timeo.units = 'days since 1858-11-17 00:00:00'
+        timeo.standard_name = 'time'
+        timeo.calendar = "Gregorian"
+        if times is not None:
+            timeo[:] = netCDF4.date2num(times, units=timeo.units,
+                                        calendar=timeo.calendar)
+
+    def create_spatial_domain(self):
+        self.nc.createDimension('x', self.nx)
+        self.nc.createDimension('y', self.ny)
+
+        xo = self.nc.createVariable('x', 'f4', ('x'))
+        xo.units = 'm'
+        xo.standard_name = 'projection_x_coordinate'
+
+        yo = self.nc.createVariable('y', 'f4', ('y'))
+        yo.units = 'm'
+
+        # create container variable for CRS: x/y WKT
+        crso = self.nc.createVariable('crs', 'i4')
+        crso.grid_mapping_name(srs)
+        crso.crs_wkt(self.wkt)
+        xo[:] = self.x
+        yo[:] = self.y
+        self.nc.Conventions = 'CF-1.7'
+
+    def create_group(self, group):
+        self.nc.createGroup(group)
+
+    def create_variable(self, group, varname, vardata,
+                        units, long_name, std_name, vartype='f4'):
+        """
+        Creates a variable in the file. The idea being that this is where data
+        gets stored.
+        MISSING STUFF:
+        * Creating the variable without data (e.g. to append later)
+        * Chunking!
+        Parameters
+        ----------
+        group : str
+            The netCDF group where the variable goes
+        varname : str
+            The variable name
+        vardata : array
+            The variable in a numpy array
+        units : str
+            The SI units (or more likely not)
+        long_name : str
+            The long variable name
+        std_name : str
+            The handy shorthand name
+        vartype : str
+            The variable type
+
+        Returns
+        -------
+
+        """
+        if vardata.ndim == 1:
+            varo = self.nc.groups[group].createVariable(varname, vartype,
+                                                        ('time'),
+                                                        zlib=True,
+                                                        chunksizes=[16],
+                                                        fill_value=-9999)
+            varo[:] = vardata
+        elif vardata.ndim == 2:
+            varo = self.nc.groups[group].createVariable(varname, vartype,
+                                                        ('y', 'x'),
+                                                        zlib=True,
+                                                        chunksizes=[12, 12],
+                                                        fill_value=-9999)
+            varo.grid_mapping = 'crs'
+
+            varo[:, :] = vardata
+
+        elif vardata.ndim == 3:
+            varo = self.nc.groups[group].createVariable(varname, vartype,
+                                                        ('t', 'y', 'x'),
+                                                        zlib=True,
+                                                        chunksizes=[16, 12, 12],
+                                                        fill_value=-9999)
+            varo.grid_mapping = 'crs'
+            varo[:, :, :] = vardata
+        else:
+            varo = self.nc.groups[group].createVariable(varname, vartype,
+                                                        'scalar')
+            varo[:] = vardata
+
+        varo.units = units
+        varo.scale_factor = 1.00
+        varo.add_offset = 0.00
+        varo.long_name = long_name
+        varo.standard_name = std_name
+        # varo.grid_mapping = 'crs'
+        varo.set_auto_maskandscale(False)
+        # varo[:,...] = vardata
+
+    def __del__(self):
+        self.nc.close()
