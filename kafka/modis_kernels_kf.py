@@ -37,6 +37,7 @@ from geoh5 import kea
 import gdal
 
 from linear_kernels_kf import KernelLinearKalman
+from utils import OutputFile # The netCDF writer
 
 # metadata is now different as it has angles innit
 Metadata = namedtuple('Metadata', 'mask uncertainty vza sza raa')
@@ -125,6 +126,8 @@ if __name__ == "__main__":
                 gdal.Open(os.path.join(the_dir, "brdf_2010_b06.vrt")),
                 gdal.Open(os.path.join(the_dir, "brdf_2010_b07.vrt")))
 
+    # We can now create the output
+    # stuff stuff stuff
     kf = MODISKernelLinearKalman( modis_obs, days, [], [] )
     n = 2400
     x_forecast = np.ones(3*2400*2400)*0.5
