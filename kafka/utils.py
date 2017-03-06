@@ -244,19 +244,23 @@ class OutputFile(object):
         self.nc.createDimension('y', self.ny)
 
         xo = self.nc.createVariable('x', 'f4', ('x'))
+
         xo.units = 'm'
         xo.standard_name = 'projection_x_coordinate'
 
         yo = self.nc.createVariable('y', 'f4', ('y'))
         yo.units = 'm'
-
+        self.nc.Conventions = 'CF-1.7'
         # create container variable for CRS: x/y WKT
-        crso = self.nc.createVariable('crs', 'i4')
-        crso.grid_mapping_name(srs)
-        crso.crs_wkt(self.wkt)
+        try:
+            crso = self.nc.createVariable('crs', 'i4')
+            crso.grid_mapping_name("srs")
+            crso.crs_wkt(self.wkt)
+        except AttributeError:
+            print "Can't create a georeferenced netCDF file. Don't know why"
         xo[:] = self.x
         yo[:] = self.y
-        self.nc.Conventions = 'CF-1.7'
+
 
     def create_group(self, group):
         self.nc.createGroup(group)
