@@ -93,25 +93,12 @@ class MODISKernelLinearKalman (KernelLinearKalman):
 
 
 
-
 if __name__ == "__main__":
     the_dir="/storage/ucfajlg/Aurade_MODIS/"
     g = gdal.Open(the_dir + "brdf_2010_b01.vrt")
     days = np.array([int(g.GetRasterBand(i+1).GetMetadata()['DoY'])
                             for i in xrange(g.RasterCount)])
-    geoT = g.GetGeoTransform()
-    srs = g.GetProjectionRef()
-    n_times = 365
-    kwargs = {'width': 2400,
-          'height': 2400,
-          'count': n_times,
-          'transform': geoT,
-          'crs': srs,
-          'compression': 9,
-          'chunks': (1200, 1200),
-          'blocksize': 1200,
-           'dtype': "float32"}
-    
+
     modis_obs = MODIS_observations( days,
                 gdal.Open(os.path.join(the_dir, "statekm_2010.vrt")),
                 gdal.Open(os.path.join(the_dir, "SensorZenith_2010.vrt")),
@@ -128,6 +115,9 @@ if __name__ == "__main__":
 
     # We can now create the output
     # stuff stuff stuff
+
+    output = OutputFile("/tmp/testme.nc", times=days, x=np.array(2400),
+                        y=np.array(2400))
     kf = MODISKernelLinearKalman( modis_obs, days, [], [] )
     n = 2400
     x_forecast = np.ones(3*2400*2400)*0.5
