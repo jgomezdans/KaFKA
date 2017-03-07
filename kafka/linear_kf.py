@@ -211,6 +211,8 @@ class LinearKalman (object):
             # The assimilation works if data is there, so we need to reduce the
             # rank of the matrices by ignoring the masked data. `matrix_squeeze`
             # helps with this...
+            x_forecast_prime = matrix_squeeze(x_forecast, mask=mask.ravel(),
+                                              n_params=self.n_params)
 
             P_forecast_prime = matrix_squeeze(P_forecast, mask=mask,
                                               n_params=self.n_params)
@@ -222,7 +224,7 @@ class LinearKalman (object):
 
             while True:
                 H_matrix = self.create_observation_operator(the_metadata,
-                                                              x_forecast )
+                                                              x_forecast_prime)
                 # At this stage, we have a forecast (prior), the observations
                 # and the observation operator, so we proceed with the
                 # assimilation
@@ -250,8 +252,6 @@ class LinearKalman (object):
                     kalman_gain1 = P_forecast_prime.dot (XX)
 
 
-                x_forecast_prime = matrix_squeeze(x_forecast, mask=mask.ravel(),
-                                                  n_params=self.n_params)
                 x_analysis_prime = x_forecast_prime + \
                                    kalman_gain*(observations.ravel()[mask.ravel()] - \
                                        H_matrix.dot(x_forecast_prime))
