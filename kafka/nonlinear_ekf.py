@@ -26,7 +26,8 @@ __version__ = "1.0 (09.03.2017)"
 __license__ = "GPLv3"
 __email__ = "j.gomez-dans@ucl.ac.uk"
 
-
+import os
+os.environ['HDF5_DISABLE_VERSION_CHECK'] = "1"
 from collections import namedtuple
 import numpy as np
 import matplotlib.pyplot as plt
@@ -35,7 +36,7 @@ from linear_kf import LinearKalman
 import gp_emulator
 import gdal
 # metadata is now different as it has angles innit
-Metadata = namedtuple('Metadata', 'mask uncertainty')
+Metadata = namedtuple('Metadata', 'mask uncertainty band')
 MCD43_observations = namedtuple('MCD43_observations',
                         'doys mcd43a1 mcd43a2')
 
@@ -54,18 +55,30 @@ class NonLinearKalman (LinearKalman):
 
     def create_observation_operator(self, metadata, x_forecast):
         """Using an emulator of the nonlinear model around `x_forecast`"""
+        
         n_times = x_forecast.shape[0]/self.n_params
         good_obs = metadata.mask.sum()
-        y = np.zeros((good_obs)) # Model evaluated at `x_forecast`
-        H_matrix = sp.lil_matrix ( shape=(good_obs, self.n_params*good_obs ),
+        
+        
+        H_matrix = sp.lil_matrix ( (good_obs, self.n_params*good_obs),
                                  dtype=np.float32)
-
-        for i in xrange(n_times):
-            y0, H0 = self.emulator.predict(x_forecast[i::n_times], do_unc=False)
-            y[i] = y0
-            dH[i, :] = H0
-            ilocs = [i+j*self.n_params for j in xrange(self.n_params)]
-            H_matrix[i, (ilocs)] = H[:]
+        # So the model has spectral components. 
+        if metadata.band == "vis":
+            # ssa, asym, LAI, rsoil
+            state_mapper = np.array([0,1,6,2])
+        elif metadata.band == "nir":
+            # ssa, asym, LAI, rsoil
+            state_mapper = np.array([3,4,6,5])
+        
+        x0 = np.zeros((good_obs, 4))
+        for i,j in enumerate(state_mapper):
+            x0[:, i] = (x_forecast[(j*n_times):((j+1)*n_times)]
+                        [metadata.mask.ravel()])
+        
+        _, H0 = self.emulator.predict(x0, do_unc=False)
+        for i in xrange(good_obs):
+            ilocs = [(i+j*good_obs) for j in state_mapper]
+            H_matrix[i, ilocs] = H0[i]
         return H_matrix.tocsr()
 
     def _get_observations_timestep(self, timestep, band=None):
@@ -75,56 +88,63 @@ class NonLinearKalman (LinearKalman):
         elif band == 1:
             band = "nir"
         time_loc = self.observations.doys == timestep
-        fich = self.observations.fnames_a1[time_loc]
+        fich = self.observations.mcd43a1[time_loc]
         to_BHR = np.array([1.0, 0.189184, -1.377622])
         fname = 'HDF4_EOS:EOS_GRID:"' + \
             '{0:s}":MOD_Grid_BRDF:BRDF_Albedo_Parameters_{1:s}'.format(fich,
                                                                        band)
         g = gdal.Open(fname)
-        data = g.ReadAsArray()
-        mask = data != 32767
-        data[mask] *= 0.001
+        data = g.ReadAsArray()[:, :512, :512]
+        mask = np.all(data != 32767, axis=0)
+        data = np.where(mask, data*0.001, np.nan)
+
         bhr = np.where(mask,
-                                  data * to_BHR[:, None, None], np.nan)
-        fich = self.observations.fnames_a2[time_loc]
+                            data * to_BHR[:, None, None], np.nan).sum(axis=0)
+        fich = self.observations.mcd43a2[time_loc]
         fname = 'HDF4_EOS:EOS_GRID:' + \
                 '"{0:s}":MOD_Grid_BRDF:BRDF_Albedo_Quality'.format(fich)
         g = gdal.Open(fname)
-        qa = g.ReadAsArray()
+        qa = g.ReadAsArray()[:512, :512]
         fname = 'HDF4_EOS:EOS_GRID:' + \
                 '"{0:s}":MOD_Grid_BRDF:Snow_BRDF_Albedo'.format(fich)
         g = gdal.Open(fname)
-        snow = g.ReadAsArray()
+        snow = g.ReadAsArray()[:512, :512]
         # qa used to define R_mat **and** mask. Don't know what to do with
         # snow information really... Ignore it?
         mask = mask * (qa != 255) # This is OK pixels
+        R_mat = bhr*0.0
 
+        R_mat[qa == 0] = np.maximum (2.5e-3, bhr[qa==0] * 0.05)
+        R_mat[qa == 1] = np.maximum (2.5e-3, bhr[qa==1] * 0.07)
 
-        R_mat[qa == 0] = np.max (2.5e-3, bhr * 0.05)
-        R_mat[qa == 1] = np.max (2.5e-3, bhr * 0.07)
-
-        metadata = Metadata(mask, R_mat)
+        metadata = Metadata(mask, R_mat, band)
 
         return bhr, R_mat, mask, metadata
 
 
 if __name__ == "__main__":
     import glob
+    import cPickle
+    
 
-
-    files = glob.glob("/storage/ucfajlg/Aurade_MODIS/MCD43A1*.hdf")
-    file.sort()
+    files = glob.glob("/storage/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
+    files.sort()
     fnames_a1 = []
     fnames_a2 = []
     doys = []
     for fich in files:
         fname = fich.split ("/")[-1]
         doy = int (fname.split(".")[1][-3:])
-        fnames_a1.append (fname)
-        fnames_a2.append (fname.replace ("MCD43A1", "MCD43A2"))
+        fnames_a1.append (fich)
+        fnames_a2.append (fich.replace ("MCD43A1", "MCD43A2"))
         doys.append (doy)
     mcd43_observations= MCD43_observations(doys, fnames_a1, fnames_a2)
+    emulator = cPickle.load (open(
+        "../SAIL_emulator_both_500trainingsamples.pkl", 'r'))
+    kalman = NonLinearKalman(emulator, mcd43_observations, doys,
+                 mcd43_observations, [], [], n_params=7)
 
-
-
-
+    bhr, R_mat, mask, metadata = kalman._get_observations_timestep(1, 
+                                                                   band=0)
+    x0 = np.ones(7*512*512)*0.5
+    H=kalman.create_observation_operator(metadata, x0)
