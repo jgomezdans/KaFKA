@@ -54,7 +54,12 @@ class NonLinearKalman (LinearKalman):
         self.emulator = emulator
 
     def create_observation_operator(self, metadata, x_forecast):
-        """Using an emulator of the nonlinear model around `x_forecast`"""
+        """Using an emulator of the nonlinear model around `x_forecast`.
+        This case is quite special, as I'm focusing on a BHR SAIL 
+        version (or the JRC TIP), which have spectral parameters 
+        (e.g. leaf single scattering albedo in two bands, etc.). This
+        is achieved by using the `state_mapper` to select which bits
+        of the state vector (and model Jacobian) are used."""
         
         n_times = x_forecast.shape[0]/self.n_params
         good_obs = metadata.mask.sum()
@@ -82,6 +87,14 @@ class NonLinearKalman (LinearKalman):
         return H_matrix.tocsr()
 
     def _get_observations_timestep(self, timestep, band=None):
+        """This method is based on the MCD43 family of products.
+        It opens the data file, reads in the VIS (... NIR) kernels,
+        integrates them to BHR, and also extracts QA flags and the
+        snow flag. The QA flags are then converted to uncertainty
+        as per Pinty's 5 and 7% argument.
+        
+        TODO Needs a clearer interface to subset parts of the image,
+        as it's currently done rather crudely."""
 
         if band == 0:
             band = "vis"
@@ -144,7 +157,9 @@ if __name__ == "__main__":
     kalman = NonLinearKalman(emulator, mcd43_observations, doys,
                  mcd43_observations, [], [], n_params=7)
 
+    # test methods
     bhr, R_mat, mask, metadata = kalman._get_observations_timestep(1, 
                                                                    band=0)
     x0 = np.ones(7*512*512)*0.5
     H=kalman.create_observation_operator(metadata, x0)
+    
