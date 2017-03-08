@@ -254,8 +254,8 @@ class OutputFile(object):
         # create container variable for CRS: x/y WKT
         try:
             crso = self.nc.createVariable('crs', 'i4')
-            crso.grid_mapping_name("srs")
-            crso.crs_wkt(self.wkt)
+            crso.grid_mapping_name = 'srs'
+            crso.crs_wkt = self.wkt
         except AttributeError:
             print "Can't create a georeferenced netCDF file. Don't know why"
         xo[:] = self.x
