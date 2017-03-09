@@ -35,11 +35,11 @@ class TestKalman(LinearKalman):
     """We used a derived class to add user-selected diagnostics"""
     def __init__(self, observations, observation_times,
                  observation_metadata, output_array, output_unc,
-                 n_params=1, diagnostics=True):
+                 n_params=1, diagnostics=True, bands_per_observation=1):
         LinearKalman.__init__(self, observations, observation_times,
                               observation_metadata, output_array,
-                              output_unc,
-                              n_params=n_params, diagnostics=True)
+                              output_unc, n_params=n_params, diagnostics=True,
+                              bands_per_observation=bands_per_observation)
 
     def _set_plot_view(self, diag_str, timestep, observations):
         obj = namedtuple("PlotObject", "fig axs fname nx ny")
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     time_steps = np.arange(0,100,2)
     QA = []
     for i,t in enumerate(time_steps):
-        meta = Metadata(np.where(qa[i,:,:]==0, False, True), 0.1)
+        meta = Metadata(np.where(qa[i,:,:]==0, False, True), [0.1])
         QA.append (meta)
 
     output_array = np.zeros((100, 50, 50))
