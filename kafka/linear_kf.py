@@ -26,6 +26,12 @@ import scipy.sparse as sp
 
 from utils import  matrix_squeeze, spsolve2, reconstruct_array
 
+# Set up logging
+import logging
+logging.basicConfig(level=logging.INFO)
+LOG = logging.getLogger(__name__)
+
+
 __author__ = "J Gomez-Dans"
 __copyright__ = "Copyright 2017 J Gomez-Dans"
 __version__ = "1.0 (09.03.2017)"
@@ -41,7 +47,7 @@ class LinearKalman (object):
     rather grotty "0-th" order models!"""
     def __init__(self, observations, observation_times,
                 observation_metadata, output_array, output_unc,
-                 n_params=1):
+                 n_params=1, diagnostics=True):
         """The class creator takes a list of observations, some metadata and a
         pointer to an output array."""
         self.n_params = n_params
@@ -50,6 +56,20 @@ class LinearKalman (object):
         self.metadata = observation_metadata
         self.output = output_array
         self.output_unc = output_unc
+        self.diagnostics = diagnostics
+
+    def _set_plot_view (self, diag_string, timestep):
+        """This sets out the plot view for each iteration. Please override this
+        method with whatever you want."""
+        pass
+
+    def _plotter_iteration_start (self, plot_obj, x, obs, mask):
+        """We call this diagnostic method at the **START** of the iteration"""
+        pass
+
+    def _plotter_iteration_end (self, plot_obj, x, P, innovation, mask):
+        """We call this diagnostic method at the **END** of the iteration"""
+        pass
 
     def _dump_output(self, step, timestep, x_analysis, P_analysis):
         """Store the output somewhere for further use. This method is called
@@ -115,7 +135,6 @@ class LinearKalman (object):
             observations = self.observations[timestep][band]
             R_mat = self.create_uncertainty(
                 self.metadata[timestep].uncertainty[band], mask)
-
         return observations, R_mat, mask.ravel(), self.metadata[timestep]
 
     def set_trajectory_model(self):
@@ -170,6 +189,7 @@ class LinearKalman (object):
         return x_forecast, P_forecast
 
     def run(self, x_forecast, P_forecast,
+                   diag_str="diagnostics",
                    band=None, approx_diagonal=True, refine_diag=True,
                    iter_obs_op=False, is_robust=False):
         is_first = True
@@ -192,22 +212,27 @@ class LinearKalman (object):
                                  x_forecast, P_forecast,
                                  band=band, approx_diagonal=approx_diagonal,
                                  refine_diag=refine_diag,
-                                 iter_obs_op=iter_obs_op, is_robust=is_robust)
+                                 iter_obs_op=iter_obs_op, is_robust=is_robust,
+                                                          diag_str=diag_str)
 
             self._dump_output(ii, timestep, x_analysis, P_analysis)
 
     def assimilate(self, locate_times, x_forecast, P_forecast,
                    band=None, approx_diagonal=True, refine_diag=False,
-                   iter_obs_op=False, is_robust=False):
+                   iter_obs_op=False, is_robust=False, diag_str="diag"):
         """The method assimilates the observatins at timestep `timestep`, using
         a prior a multivariate Gaussian distribution with mean `x_forecast` and
         variance `P_forecast`."""
-        #import pdb;pdb.set_trace()
         for step in locate_times:
-            print step
+            LOG.info("Assimilating %d..." % step)
             # Extract observations, mask and uncertainty for the current time
             observations, R_mat, mask, the_metadata = \
                 self._get_observations_timestep(step, band)
+            if self.diagnostics:
+                plot_object = self._set_plot_view(diag_str, step, observations)
+                self._plotter_iteration_start(plot_object, x_forecast,
+                                              observations, mask )
+
             # The assimilation works if data is there, so we need to reduce the
             # rank of the matrices by ignoring the masked data. `matrix_squeeze`
             # helps with this...
@@ -219,7 +244,6 @@ class LinearKalman (object):
             # In an EKF, we would iterate and update the observation operator
             # until convergence is reached. If the observation operator is
             # linear, then no iterations are needed.
-
             while True:
                 H_matrix = self.create_observation_operator(the_metadata,
                                                               x_forecast )
@@ -252,9 +276,11 @@ class LinearKalman (object):
 
                 x_forecast_prime = matrix_squeeze(x_forecast, mask=mask.ravel(),
                                                   n_params=self.n_params)
+                innovations_prime = (observations.ravel()[mask.ravel()] -
+                                     H_matrix.dot(x_forecast_prime))
+
                 x_analysis_prime = x_forecast_prime + \
-                                   kalman_gain*(observations.ravel()[mask.ravel()] - \
-                                       H_matrix.dot(x_forecast_prime))
+                                   kalman_gain*innovations_prime
                 P_analysis_prime = ((sp.eye(kalman_gain.shape[0], kalman_gain.shape[0])
                                - kalman_gain*H_matrix)*P_forecast_prime)
                 # Now move
@@ -266,6 +292,10 @@ class LinearKalman (object):
                                                mask, n_params=self.n_params)
                 P_analysis = sp.dia_matrix ( (P_analysis_diag, 0),
                                              shape=P_forecast.shape)
+                if self.diagnostics:
+                    self._plotter_iteration_end(plot_object, x_analysis,
+                                                P_analysis,
+                                                innovations_prime, mask)
 
                 if iter_obs_op:
                     # TODO test for convergence
@@ -283,58 +313,3 @@ class LinearKalman (object):
             return x_analysis, P_analysis
 
 
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
-
-    f = np.load("../test_identity_data.npz")
-    data = f['data']
-    qa = f['qa']
-    time_steps = np.arange(0,100,2)
-    QA = []
-    for i,t in enumerate(time_steps):
-        meta = Metadata(np.where(qa[i,:,:]==0, False, True), 0.1)
-        QA.append (meta)
-
-    output_array = np.zeros((100, 50, 50))
-    output_unc = np.zeros((100, 50, 50))
-    kalman_filter = LinearKalman(data, time_steps, QA, output_array, output_unc)
-    kalman_filter.set_trajectory_model()
-    kalman_filter.set_trajectory_uncertainty(0.005)
-    x_f = 0.5*np.ones(50*50).ravel()
-
-    P_f = sp.eye(50*50, 50*50, format="csr", dtype=np.float32)
-
-
-    kalman_filter.run(x_f, P_f, refine_diag=True)
-
-    fig, axs = plt.subplots ( 1, 3, sharex=True, sharey=True, figsize=(15,5))
-    axs = axs.flatten()
-    get_state = lambda i: kalman_filter.output[i]
-    get_state_unc= lambda i: kalman_filter.output_unc[i]
-    get_obs = lambda i: data[i/2] if i%2 == 0 else np.nan*np.ones((50,50))
-    im1 = axs[1].imshow (get_state(0), animated=True, interpolation='nearest',
-                     vmin=0, vmax=1)
-    im2 = axs[2].imshow (get_state_unc(0), animated=True, interpolation='nearest',
-                     vmin=0, vmax=0.1)
-
-    im3 = axs[0].imshow (get_obs(0), animated=True, interpolation='nearest',
-                     vmin=0, vmax=1)
-    axs[1].set_title("State")
-    axs[2].set_title("State uncertainty")
-    axs[0].set_title("Observations")
-    [axs[i].set_ylim(0, 50) for i in xrange(3)]
-    [axs[i].set_xlim(0, 50) for i in xrange(3)]
-    [axs[i].axis('off') for i in xrange(3)]
-    plt.tight_layout()
-    def updatefig (i):
-        im1.set_array(get_state(i))
-        im2.set_array(get_state_unc(i))
-        im3.set_array(get_obs(i))
-
-        return im1,im2,im3
-
-    ani = animation.FuncAnimation(fig, updatefig, frames=np.arange(100),
-                                  interval=100, blit=False)
-
-    ani.save('state.gif', writer='imagemagick')
