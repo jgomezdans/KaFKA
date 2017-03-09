@@ -70,7 +70,7 @@ def matrix_squeeze (a_matrix, mask=None, n_params=1):
         a_matrix_squeezed = a_matrix[rows, :][:, columns]
     else:
         # Calculate the size of the output array from the non-zero mask elements
-        if mask.ndim == 2: 
+        if mask.ndim == 2:
             mask = mask.ravel()
         n = mask.sum()
         a_matrix_squeezed = sp.csr_matrix((n, n))
@@ -254,7 +254,7 @@ class OutputFile(object):
         # create container variable for CRS: x/y WKT
         try:
             crso = self.nc.createVariable('crs', 'i4')
-            crso.grid_mapping_name = 'srs'
+            crso.grid_mapping_name = "srs"
             crso.crs_wkt = self.wkt
         except AttributeError:
             print "Can't create a georeferenced netCDF file. Don't know why"
