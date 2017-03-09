@@ -47,7 +47,7 @@ class LinearKalman (object):
     rather grotty "0-th" order models!"""
     def __init__(self, observations, observation_times,
                 observation_metadata, output_array, output_unc,
-                 n_params=1, diagnostics=True):
+                 n_params=1, diagnostics=True, bands_per_observation=1):
         """The class creator takes a list of observations, some metadata and a
         pointer to an output array."""
         self.n_params = n_params
@@ -57,6 +57,7 @@ class LinearKalman (object):
         self.output = output_array
         self.output_unc = output_unc
         self.diagnostics = diagnostics
+        self.bands_per_observation = bands_per_observation
 
     def _set_plot_view (self, diag_string, timestep):
         """This sets out the plot view for each iteration. Please override this
@@ -169,7 +170,7 @@ class LinearKalman (object):
         R_mat = np.ones (good_obs)*uncertainty*uncertainty
         return sp.dia_matrix((R_mat, 0), shape=(R_mat.shape[0], R_mat.shape[0]))
 
-    def create_observation_operator (self, metadata, x_forecast):
+    def create_observation_operator (self, metadata, x_forecast, band=None):
         """A simple **identity** observation opeartor. It is expected that you
         subclass and redefine things...."""
         good_obs = metadata.mask.sum() # size of H_matrix
@@ -208,12 +209,14 @@ class LinearKalman (object):
                 continue
             else:
                 # We do have data, so we assimilate
-                x_analysis, P_analysis = self.assimilate (locate_times,
-                                 x_forecast, P_forecast,
-                                 band=band, approx_diagonal=approx_diagonal,
-                                 refine_diag=refine_diag,
-                                 iter_obs_op=iter_obs_op, is_robust=is_robust,
-                                                          diag_str=diag_str)
+                for band in xrange(self.bands_per_observation):
+                    # This loops over the bands in the observations
+                    x_analysis, P_analysis = self.assimilate (locate_times,
+                                     x_forecast, P_forecast,
+                                     band=band, approx_diagonal=approx_diagonal,
+                                     refine_diag=refine_diag,
+                                     iter_obs_op=iter_obs_op,
+                                     is_robust=is_robust, diag_str=diag_str)
 
             self._dump_output(ii, timestep, x_analysis, P_analysis)
 
@@ -226,8 +229,13 @@ class LinearKalman (object):
         for step in locate_times:
             LOG.info("Assimilating %d..." % step)
             # Extract observations, mask and uncertainty for the current time
-            observations, R_mat, mask, the_metadata = \
-                self._get_observations_timestep(step, band)
+            if self.bands_per_observation == 1:
+                observations, R_mat, mask, the_metadata = \
+                    self._get_observations_timestep(step, None)
+            else:
+                observations, R_mat, mask, the_metadata = \
+                    self._get_observations_timestep(step, band)
+
             if self.diagnostics:
                 plot_object = self._set_plot_view(diag_str, step, observations)
                 self._plotter_iteration_start(plot_object, x_forecast,
@@ -245,8 +253,13 @@ class LinearKalman (object):
             # until convergence is reached. If the observation operator is
             # linear, then no iterations are needed.
             while True:
-                H_matrix = self.create_observation_operator(the_metadata,
-                                                              x_forecast )
+                if self.bands_per_observation == 1:
+                    H_matrix = self.create_observation_operator(the_metadata,
+                                                              x_forecast, None)
+                else:
+                    H_matrix = self.create_observation_operator(the_metadata,
+                                                              x_forecast, band)
+
                 # At this stage, we have a forecast (prior), the observations
                 # and the observation operator, so we proceed with the
                 # assimilation
