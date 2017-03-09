@@ -51,6 +51,7 @@ def distance_kullback(A, B):
     kl = np.trace(np.dot(np.linalg.inv(B), A)) - dim + logdet
     return 0.5 * kl
 
+
 def plot_observations (fstring, step, observations, mask):
     """
     A simple plotting routine to plot the observations at every assimilation
@@ -69,14 +70,16 @@ def plot_observations (fstring, step, observations, mask):
     cmap = plt.cm.viridis
     ny, nx = observations.shape
     mask = mask.reshape((ny,nx))
-    fig, axs = plt.subplots(nrows=1, ncols=1)
+    fig, axs = plt.subplots(nrows=1, ncols=2)
     axs = axs.flatten()
     axs[0].imshow ( observations, interpolation='nearest', cmap=cmap)
     axs[1].imshow(mask, interpolation='nearest',cmap=plt.cm.gray)
     fig.savefig("obs_%s_%05d.png" % (fstring, step), dpi=150, bbox_inches="tight")
-    fig.close()
+    #fig.close()
 
-def plot_innovations(fstring, step, innovation, mask, obs_uncertainty):
+
+def plot_innovations(fstring, step, innovation, mask, obs_uncertainty,
+                     observations):
     """
     Plots the innovations
     Parameters
@@ -91,6 +94,14 @@ def plot_innovations(fstring, step, innovation, mask, obs_uncertainty):
     -------
 
     """
+    ny, nx = observations.shape
+    M = observations*0 + np.nan
+    unc = np.array(np.sqrt(obs_uncertainty.diagonal())).squeeze()
+    not_masked = mask.reshape((nx, ny))
+    M[not_masked] = innovation/unc
+    plt.imshow(M, interpolation="nearest", cmap=plt.cm.viridis)
+    import pdb;pdb.set_trace()
+    pass
 
 def plot_posterior_prior_update():
     # Basically KL divergence
