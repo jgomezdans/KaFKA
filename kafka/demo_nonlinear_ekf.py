@@ -35,6 +35,12 @@ import scipy.sparse as sp
 from nonlinear_ekf import NonLinearKalman
 import gp_emulator
 import gdal
+
+# Set up logging
+import logging
+logging.basicConfig(level=logging.INFO)
+LOG = logging.getLogger(__name__)
+
 # metadata is now different as it has angles innit
 Metadata = namedtuple('Metadata', 'mask uncertainty band')
 MCD43_observations = namedtuple('MCD43_observations',
@@ -65,8 +71,8 @@ class BHRKalman (NonLinearKalman):
             band = "vis"
         elif band == 1:
             band = "nir"
-        time_loc = self.observations.doys == timestep
-        fich = self.observations.mcd43a1[time_loc]
+        #time_loc = self.observations.doys == timestep
+        fich = self.observations.mcd43a1[timestep]
         to_BHR = np.array([1.0, 0.189184, -1.377622])
         fname = 'HDF4_EOS:EOS_GRID:"' + \
                 '{0:s}":MOD_Grid_BRDF:BRDF_Albedo_Parameters_{1:s}'.format(fich,
@@ -78,7 +84,7 @@ class BHRKalman (NonLinearKalman):
 
         bhr = np.where(mask,
                        data * to_BHR[:, None, None], np.nan).sum(axis=0)
-        fich = self.observations.mcd43a2[time_loc]
+        fich = self.observations.mcd43a2[timestep]
         fname = 'HDF4_EOS:EOS_GRID:' + \
                 '"{0:s}":MOD_Grid_BRDF:BRDF_Albedo_Quality'.format(fich)
         g = gdal.Open(fname)
@@ -164,6 +170,7 @@ if __name__ == "__main__":
         fnames_a1.append(fich)
         fnames_a2.append(fich.replace("MCD43A1", "MCD43A2"))
         doys.append(doy)
+    doys = np.array(doys)
     mcd43_observations = MCD43_observations(doys, fnames_a1, fnames_a2)
     emulator = cPickle.load(open(
         "../SAIL_emulator_both_500trainingsamples.pkl", 'r'))
@@ -174,5 +181,10 @@ if __name__ == "__main__":
     bhr, R_mat, mask, metadata = kalman._get_observations_timestep(1,
                                                                    band=0)
     x0 = np.ones(7 * 512 * 512) * 0.5
-    H = kalman.create_observation_operator(metadata, x0)
+    P_forecast = sp.dia_matrix((7*512*512, 7*512*512))
+    P_forecast.setdiag(np.ones(7 * 512 * 512) * 0.1)
+    kalman.run(x0, P_forecast,
+                   diag_str="diagnostics",
+                   approx_diagonal=True, refine_diag=False,
+                   iter_obs_op=False, is_robust=False)
 

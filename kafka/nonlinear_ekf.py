@@ -56,14 +56,14 @@ class NonLinearKalman (LinearKalman):
                               n_params=n_params)
         self.emulator = emulator
 
-    def create_observation_operator(self, metadata, x_forecast):
+    def create_observation_operator(self, metadata, x_forecast, band):
         """Using an emulator of the nonlinear model around `x_forecast`.
         This case is quite special, as I'm focusing on a BHR SAIL 
         version (or the JRC TIP), which have spectral parameters 
         (e.g. leaf single scattering albedo in two bands, etc.). This
         is achieved by using the `state_mapper` to select which bits
         of the state vector (and model Jacobian) are used."""
-        
+        LOG.debug("Creating the ObsOp for band %d" % band)
         n_times = x_forecast.shape[0]/self.n_params
         good_obs = metadata.mask.sum()
         
@@ -71,10 +71,10 @@ class NonLinearKalman (LinearKalman):
         H_matrix = sp.lil_matrix ( (good_obs, self.n_params*good_obs),
                                  dtype=np.float32)
         # So the model has spectral components. 
-        if metadata.band == "vis":
+        if band == 0:
             # ssa, asym, LAI, rsoil
             state_mapper = np.array([0,1,6,2])
-        elif metadata.band == "nir":
+        elif band == 1:
             # ssa, asym, LAI, rsoil
             state_mapper = np.array([3,4,6,5])
         
@@ -84,8 +84,10 @@ class NonLinearKalman (LinearKalman):
                         [metadata.mask.ravel()])
         
         _, H0 = self.emulator.predict(x0, do_unc=False)
+
         for i in xrange(good_obs):
             ilocs = [(i+j*good_obs) for j in state_mapper]
             H_matrix[i, ilocs] = H0[i]
+        LOG.debug("\tDone!")
         return H_matrix.tocsr()
 
