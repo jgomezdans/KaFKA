@@ -186,6 +186,7 @@ class OutputFile(object):
             self._get_spatial_metadata(input_file)
             self.create_spatial_domain()
 
+
     def _get_spatial_metadata(self, geofile):
         """
         Gets (and sets!) the spatial metadata from a GDAL file
@@ -208,6 +209,7 @@ class OutputFile(object):
         self.nx = nx
         self.ny = ny
         self.wkt = g.GetProjectionRef()
+
 
     def create_netcdf(self, times=None):
         """
@@ -264,6 +266,7 @@ class OutputFile(object):
 
     def create_group(self, group):
         self.nc.createGroup(group)
+
 
     def create_variable(self, group, varname, vardata,
                         units, long_name, std_name, vartype='f4'):
@@ -332,6 +335,31 @@ class OutputFile(object):
         # varo.grid_mapping = 'crs'
         varo.set_auto_maskandscale(False)
         # varo[:,...] = vardata
+
+
+    def update_variable(self, group, varname, vardata):
+        """
+        Appends data to a variable in the file.
+        MISSING STUFF:
+        * Assumes variable already created
+        * Error checking
+        * Chunking!
+        Parameters
+        ----------
+        group : str
+            The netCDF group where the variable goes
+        varname : str
+            The variable name
+        vardata : array
+            The variable in a numpy array
+
+        Returns
+        -------
+
+        """
+        varo = self.nc.groups[group].variables[varname]
+        varo[varo.shape[0], : ,:] = vardata
+
 
     def __del__(self):
         self.nc.close()
