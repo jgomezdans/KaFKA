@@ -232,7 +232,8 @@ class OutputFile(object):
         if times is None:
             self.nc.createDimension('time', None)
         else:
-            self.nc.createDimension('time', len(times))
+            # If we plan to append slices time must be unlimited
+            self.nc.createDimension('time', None) #len(times))
         timeo = self.nc.createVariable('time', 'f4', ('time'))
         timeo.units = 'days since 1858-11-17 00:00:00'
         timeo.standard_name = 'time'
