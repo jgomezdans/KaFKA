@@ -313,7 +313,7 @@ class OutputFile(object):
 
         elif vardata.ndim == 3:
             varo = self.nc.groups[group].createVariable(varname, vartype,
-                                                        ('t', 'y', 'x'),
+                                                        ('time', 'y', 'x'),
                                                         zlib=True,
                                                         chunksizes=[16, 12, 12],
                                                         fill_value=-9999)
