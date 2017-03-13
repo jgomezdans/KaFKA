@@ -33,7 +33,7 @@ import netCDF4
 import datetime as dt
 import os
 import gdal
-
+import logging
 
 def spsolve2(a, b):
     a_lu = spl.splu(a.tocsc()) # LU decomposition for sparse a
@@ -357,7 +357,11 @@ class OutputFile(object):
         -------
 
         """
-        varo = self.nc.groups[group].variables[varname]
+        try:
+            varo = self.nc.groups[group].variables[varname]
+        except KeyError:
+            print "Group ['{}'] and/or variable ['{}'] not in ncfile.".format(group, varname)
+            raise
         varo[varo.shape[0], : ,:] = vardata
 
 
