@@ -343,7 +343,6 @@ class OutputFile(object):
         Appends data to a variable in the file.
         MISSING STUFF:
         * Assumes variable already created
-        * Error checking
         * Chunking!
         Parameters
         ----------
@@ -363,7 +362,25 @@ class OutputFile(object):
         except KeyError:
             print "Group ['{}'] and/or variable ['{}'] not in ncfile.".format(group, varname)
             raise
-        varo[varo.shape[0], ...] = vardata
+        ndims = len(varo.shape)
+        if ndims == len(vardata.shape):
+            if varo.shape[1:] == vardata.shape[1:]:
+                varo[varo.shape[0]:(varo.shape[0]+vardata.shape[0])] = vardata
+            else:
+                raise ValueError(
+                    "Dimensions of new data {} don't match existing variable in netCDF file {}".format(
+                        vardata.shape[1:], varo.shape[1:]
+                    ))
+        elif len(vardata.shape) == ndims-1:
+            if varo.shape[1:] == vardata.shape:
+                varo[varo.shape[0], ...] = vardata
+            else:
+                raise ValueError(
+                    "Dimensions of new data {} don't match existing variable in netCDF file {}".format(
+                        vardata.shape, varo.shape[1:]
+                    ))
+        else:
+            raise ValueError("Dimensions of new data don't match existing data.")
 
 
     def __del__(self):
