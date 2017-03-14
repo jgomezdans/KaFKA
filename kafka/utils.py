@@ -272,10 +272,9 @@ class OutputFile(object):
     def create_variable(self, group, varname, vardata,
                         units, long_name, std_name, vartype='f4'):
         """
-        Creates a variable in the file. The idea being that this is where data
-        gets stored.
+        Creates a variable in the file and add data to it. The idea being that
+        this is where data gets stored.
         MISSING STUFF:
-        * Creating the variable without data (e.g. to append later)
         * Chunking!
         Parameters
         ----------
@@ -311,10 +310,9 @@ class OutputFile(object):
     def create_empty_variable(self, group, varname, ndim,
                               units, long_name, std_name, vartype='f4'):
         """
-        Creates a variable in the file. The idea being that this is where data
-        gets stored.
+        Creates a variable in the file without adding data. The idea being that
+        this is where data gets stored.
         MISSING STUFF:
-        * Creating the variable without data (e.g. to append later)
         * Chunking!
         Parameters
         ----------
