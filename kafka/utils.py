@@ -393,6 +393,8 @@ class OutputFile(object):
         except KeyError:
             print "Group ['{}'] and/or variable ['{}'] not in ncfile.".format(group, varname)
             raise
+        if varo.dimensions[0] != 'time':
+            raise TypeError("Can only append to a variable with time dimension (dimensions {})".format(varo.dimensions))
         if varo.ndim == len(vardata.shape):
             if varo.shape[1:] == vardata.shape[1:]:
                 varo[varo.shape[0]:(varo.shape[0]+vardata.shape[0])] = vardata
