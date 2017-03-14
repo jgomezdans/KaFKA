@@ -363,7 +363,7 @@ class OutputFile(object):
         except KeyError:
             print "Group ['{}'] and/or variable ['{}'] not in ncfile.".format(group, varname)
             raise
-        varo[varo.shape[0], : ,:] = vardata
+        varo[varo.shape[0], ...] = vardata
 
 
     def __del__(self):
