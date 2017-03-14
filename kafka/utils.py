@@ -298,35 +298,68 @@ class OutputFile(object):
         -------
 
         """
-        if vardata.ndim == 1:
+        self.create_empty_variable(group, varname, vardata.ndim,
+                              units, long_name, std_name, vartype=vartype)
+        varo = self.nc.groups[group].variables[varname]
+        if vardata.ndim == 3:
+            varo[:, :, :] = vardata
+        elif vardata.ndim == 2:
+            varo[:,:] = vardata
+        else:
+            varo[:] = vardata
+
+    def create_empty_variable(self, group, varname, ndim,
+                              units, long_name, std_name, vartype='f4'):
+        """
+        Creates a variable in the file. The idea being that this is where data
+        gets stored.
+        MISSING STUFF:
+        * Creating the variable without data (e.g. to append later)
+        * Chunking!
+        Parameters
+        ----------
+        group : str
+            The netCDF group where the variable goes
+        varname : str
+            The variable name
+        ndim : array
+            The number of dimensions
+        units : str
+            The SI units (or more likely not)
+        long_name : str
+            The long variable name
+        std_name : str
+            The handy shorthand name
+        vartype : str
+            The variable type
+
+        Returns
+        -------
+
+        """
+        if ndim == 1:
             varo = self.nc.groups[group].createVariable(varname, vartype,
                                                         ('time'),
                                                         zlib=True,
                                                         chunksizes=[16],
                                                         fill_value=-9999)
-            varo[:] = vardata
-        elif vardata.ndim == 2:
+        elif ndim == 2:
             varo = self.nc.groups[group].createVariable(varname, vartype,
                                                         ('y', 'x'),
                                                         zlib=True,
                                                         chunksizes=[12, 12],
                                                         fill_value=-9999)
             varo.grid_mapping = 'crs'
-
-            varo[:, :] = vardata
-
-        elif vardata.ndim == 3:
+        elif ndim == 3:
             varo = self.nc.groups[group].createVariable(varname, vartype,
                                                         ('time', 'y', 'x'),
                                                         zlib=True,
                                                         chunksizes=[16, 12, 12],
                                                         fill_value=-9999)
             varo.grid_mapping = 'crs'
-            varo[:, :, :] = vardata
         else:
             varo = self.nc.groups[group].createVariable(varname, vartype,
                                                         'scalar')
-            varo[:] = vardata
 
         varo.units = units
         varo.scale_factor = 1.00
