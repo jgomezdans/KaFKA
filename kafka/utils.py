@@ -362,8 +362,7 @@ class OutputFile(object):
         except KeyError:
             print "Group ['{}'] and/or variable ['{}'] not in ncfile.".format(group, varname)
             raise
-        ndims = len(varo.shape)
-        if ndims == len(vardata.shape):
+        if varo.ndim == len(vardata.shape):
             if varo.shape[1:] == vardata.shape[1:]:
                 varo[varo.shape[0]:(varo.shape[0]+vardata.shape[0])] = vardata
             else:
@@ -371,7 +370,7 @@ class OutputFile(object):
                     "Dimensions of new data {} don't match existing variable in netCDF file {}".format(
                         vardata.shape[1:], varo.shape[1:]
                     ))
-        elif len(vardata.shape) == ndims-1:
+        elif len(vardata.shape) == varo.ndim-1:
             if varo.shape[1:] == vardata.shape:
                 varo[varo.shape[0], ...] = vardata
             else:
