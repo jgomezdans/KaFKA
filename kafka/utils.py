@@ -186,6 +186,7 @@ class OutputFile(object):
             self._get_spatial_metadata(input_file)
             self.create_spatial_domain()
 
+
     def _get_spatial_metadata(self, geofile):
         """
         Gets (and sets!) the spatial metadata from a GDAL file
@@ -209,6 +210,7 @@ class OutputFile(object):
         self.ny = ny
         self.wkt = g.GetProjectionRef()
 
+
     def create_netcdf(self, times=None):
         """
         Creates our beloved netCDF file. Can also take an optional array of
@@ -230,7 +232,8 @@ class OutputFile(object):
         if times is None:
             self.nc.createDimension('time', None)
         else:
-            self.nc.createDimension('time', len(times))
+            # If we plan to append slices time must be unlimited
+            self.nc.createDimension('time', None) #len(times))
         timeo = self.nc.createVariable('time', 'f4', ('time'))
         timeo.units = 'days since 1858-11-17 00:00:00'
         timeo.standard_name = 'time'
@@ -265,13 +268,13 @@ class OutputFile(object):
     def create_group(self, group):
         self.nc.createGroup(group)
 
+
     def create_variable(self, group, varname, vardata,
                         units, long_name, std_name, vartype='f4'):
         """
-        Creates a variable in the file. The idea being that this is where data
-        gets stored.
+        Creates a variable in the file and add data to it. The idea being that
+        this is where data gets stored.
         MISSING STUFF:
-        * Creating the variable without data (e.g. to append later)
         * Chunking!
         Parameters
         ----------
@@ -294,35 +297,67 @@ class OutputFile(object):
         -------
 
         """
-        if vardata.ndim == 1:
+        self.create_empty_variable(group, varname, vardata.ndim,
+                              units, long_name, std_name, vartype=vartype)
+        varo = self.nc.groups[group].variables[varname]
+        if vardata.ndim == 3:
+            varo[:, :, :] = vardata
+        elif vardata.ndim == 2:
+            varo[:,:] = vardata
+        else:
+            varo[:] = vardata
+
+    def create_empty_variable(self, group, varname, ndim,
+                              units, long_name, std_name, vartype='f4'):
+        """
+        Creates a variable in the file without adding data. The idea being that
+        this is where data gets stored.
+        MISSING STUFF:
+        * Chunking!
+        Parameters
+        ----------
+        group : str
+            The netCDF group where the variable goes
+        varname : str
+            The variable name
+        ndim : array
+            The number of dimensions
+        units : str
+            The SI units (or more likely not)
+        long_name : str
+            The long variable name
+        std_name : str
+            The handy shorthand name
+        vartype : str
+            The variable type
+
+        Returns
+        -------
+
+        """
+        if ndim == 1:
             varo = self.nc.groups[group].createVariable(varname, vartype,
                                                         ('time'),
                                                         zlib=True,
                                                         chunksizes=[16],
                                                         fill_value=-9999)
-            varo[:] = vardata
-        elif vardata.ndim == 2:
+        elif ndim == 2:
             varo = self.nc.groups[group].createVariable(varname, vartype,
                                                         ('y', 'x'),
                                                         zlib=True,
                                                         chunksizes=[12, 12],
                                                         fill_value=-9999)
             varo.grid_mapping = 'crs'
-
-            varo[:, :] = vardata
-
-        elif vardata.ndim == 3:
+        elif ndim == 3:
             varo = self.nc.groups[group].createVariable(varname, vartype,
-                                                        ('t', 'y', 'x'),
+                                                        ('time', 'y', 'x'),
                                                         zlib=True,
                                                         chunksizes=[16, 12, 12],
                                                         fill_value=-9999)
             varo.grid_mapping = 'crs'
-            varo[:, :, :] = vardata
         else:
             varo = self.nc.groups[group].createVariable(varname, vartype,
                                                         'scalar')
-            varo[:] = vardata
 
         varo.units = units
         varo.scale_factor = 1.00
@@ -332,6 +367,53 @@ class OutputFile(object):
         # varo.grid_mapping = 'crs'
         varo.set_auto_maskandscale(False)
         # varo[:,...] = vardata
+
+
+    def update_variable(self, group, varname, vardata):
+        """
+        Appends data to a variable in the file.
+        MISSING STUFF:
+        * Assumes variable already created
+        * Chunking!
+        Parameters
+        ----------
+        group : str
+            The netCDF group where the variable goes
+        varname : str
+            The variable name
+        vardata : array
+            The variable in a numpy array
+
+        Returns
+        -------
+
+        """
+        try:
+            varo = self.nc.groups[group].variables[varname]
+        except KeyError:
+            print "Group ['{}'] and/or variable ['{}'] not in ncfile.".format(group, varname)
+            raise
+        if varo.dimensions[0] != 'time':
+            raise TypeError("Can only append to a variable with time dimension (dimensions {})".format(varo.dimensions))
+        if varo.ndim == len(vardata.shape):
+            if varo.shape[1:] == vardata.shape[1:]:
+                varo[varo.shape[0]:(varo.shape[0]+vardata.shape[0])] = vardata
+            else:
+                raise ValueError(
+                    "Dimensions of new data {} don't match existing variable in netCDF file {}".format(
+                        vardata.shape[1:], varo.shape[1:]
+                    ))
+        elif len(vardata.shape) == varo.ndim-1:
+            if varo.shape[1:] == vardata.shape:
+                varo[varo.shape[0], ...] = vardata
+            else:
+                raise ValueError(
+                    "Dimensions of new data {} don't match existing variable in netCDF file {}".format(
+                        vardata.shape, varo.shape[1:]
+                    ))
+        else:
+            raise ValueError("Dimensions of new data don't match existing data.")
+
 
     def __del__(self):
         self.nc.close()
