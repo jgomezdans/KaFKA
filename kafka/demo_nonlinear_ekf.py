@@ -100,21 +100,24 @@ class BHRKalman (NonLinearKalman):
 
         R_mat[qa == 0] = np.maximum(2.5e-3, bhr[qa == 0] * 0.05)
         R_mat[qa == 1] = np.maximum(2.5e-3, bhr[qa == 1] * 0.07)
+        R_mat_sp = sp.csr_matrix((mask.sum(), mask.sum()))
+        R_mat_sp.setdiag(R_mat[mask])
+        
+        metadata = Metadata(mask, R_mat_sp, band)
 
-        metadata = Metadata(mask, R_mat, band)
-
-        return bhr, R_mat, mask, metadata
+        return bhr, R_mat_sp, mask, metadata
 
 
     def _set_plot_view(self, diag_str, timestep, observations):
         obj = namedtuple("PlotObject", "fig axs fname nx ny")
         title = "%s %d" % (diag_str, timestep)
         fname = "diagnostic_%s_%04d" % (diag_str, timestep)
-        fig, axs = plt.subplots(nrows=self.n_params, ncols=5, sharex=True,
+        # Only bothering with LAIeff for the time being!
+        fig, axs = plt.subplots(ncols=self.n_params, nrows=2, sharex=True,
                                 sharey=True, figsize=(15, 5),
                                 subplot_kw=dict(
                                     adjustable='box-forced', aspect='equal'))
-        axs = axs.flatten()
+        #axs = axs.flatten() # Easier *not* to flatten
         fig.suptitle(title)
         ny, nx = observations.shape
         plot_obj = obj(fig, axs, fname, nx, ny)
@@ -124,12 +127,14 @@ class BHRKalman (NonLinearKalman):
     def _plotter_iteration_start(self, plot_obj, x, obs, mask):
         cmap = plt.cm.viridis
         cmap.set_bad = "0.8"
-        plot_obj.axs[0].imshow(x.reshape(obs.shape), interpolation='nearest',
+        
+        #plot_obj.axs[0].imshow(x[6*512*512:].reshape(obs.shape), interpolation='nearest',
+        #                       cmap=cmap)
+        #plot_obj.axs[0].set_title("Prior state")
+        
+        plot_obj.axs[0][0].imshow(obs, interpolation='nearest',
                                cmap=cmap)
-        plot_obj.axs[0].set_title("Prior state")
-        plot_obj.axs[1].imshow(obs, interpolation='nearest',
-                               cmap=cmap)
-        plot_obj.axs[1].set_title("Observations")
+        plot_obj.axs[0][0].set_title("Observations")
 
 
     def _plotter_iteration_end(self, plot_obj, x, P, innovation, mask):
@@ -139,16 +144,19 @@ class BHRKalman (NonLinearKalman):
         M = np.ones((plot_obj.ny, plot_obj.nx)) * np.nan
         not_masked = mask.reshape((plot_obj.ny, plot_obj.nx))
         M[not_masked] = innovation
-        plot_obj.axs[2].imshow(M, interpolation='nearest',
-                               cmap=cmap)
-        plot_obj.axs[2].set_title("Innovation")
-        plot_obj.axs[3].imshow(x.reshape((plot_obj.ny, plot_obj.nx)),
+        #plot_obj.axs[2].imshow(M, interpolation='nearest',
+                               #cmap=cmap)
+        #plot_obj.axs[2].set_title("Innovation")
+        n_pixels = plot_obj.nx*plot_obj.ny
+        for i in xrange(self.n_params):
+            plot_obj.axs[1][i].imshow(x[(i*n_pixels):((i+1)*n_pixels)].reshape
+                                      ((plot_obj.ny, plot_obj.nx)),
                                interpolation='nearest', cmap=cmap)
-        plot_obj.axs[3].set_title("Posterior mean")
-        unc = P.diagonal().reshape((plot_obj.ny, plot_obj.nx))
-        plot_obj.axs[4].imshow(np.sqrt(unc),
-                               interpolation='nearest', cmap=cmap)
-        plot_obj.axs[4].set_title("Posterior StdDev")
+        #plot_obj.axs[3].set_title("Posterior mean")
+        #unc = P.diagonal().reshape((plot_obj.ny, plot_obj.nx))
+        #plot_obj.axs[4].imshow(np.sqrt(unc),
+        #                       interpolation='nearest', cmap=cmap)
+        #plot_obj.axs[4].set_title("Posterior StdDev")
 
         plot_obj.fig.savefig(plot_obj.fname + ".png", dpi=72,
                              bbox_inches="tight")
