@@ -41,6 +41,10 @@ MCD43_observations = namedtuple('MCD43_observations',
                         'doys mcd43a1 mcd43a2')
 
 
+# Set up logging
+import logging
+logging.basicConfig(level=logging.INFO)
+LOG = logging.getLogger(__name__)
 
 class NonLinearKalman (LinearKalman):
     """A class that extends to non linear models"""
