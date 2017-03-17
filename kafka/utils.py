@@ -87,7 +87,10 @@ def matrix_squeeze (a_matrix, mask=None, n_params=1):
         # This is different for vector and matrix
         if a_matrix.ndim == 2:
             # Just subset by mask location in rows/cols
-            a_matrix_squeezed = a_matrix[m, :][:, m]
+            if a_matrix.getformat() == "dia":
+                a_matrix_squeezed = a_matrix.tocsr()[m, :][:, m]
+            else:
+                a_matrix_squeezed = a_matrix[m, :][:, m]
         elif a_matrix.ndim == 1: # vector
             # Same, but just in one dimension
             a_matrix_squeezed = np.zeros(n_params*n)
