@@ -251,38 +251,38 @@ class LinearKalman (object):
                         H_matrix = self.create_observation_operator(the_metadata,
                                                     x_forecast, band)
 
-                    x_analysis, P_analysis = self.solver (observations, mask, H_matrix,
-                                                          x_forecast, P_forecast, R_mat, the_metadata)
+                    x_analysis, P_analysis, innovations_prime  = self.solver(
+                        observations, mask, H_matrix,
+                        x_forecast, P_forecast, R_mat, the_metadata)
 
 
-                        if self.diagnostics:
-                            self._plotter_iteration_end(plot_object, x_analysis,
+                    if self.diagnostics:
+                        self._plotter_iteration_end(plot_object, x_analysis,
                                                         P_analysis,
                                                         innovations_prime, mask)
 
-                        if iter_obs_op:
-                            # TODO test for convergence of the observation operator
-                            converged = True
-                        else:
-                            converged = True
+                    if iter_obs_op:
+                        # TODO test for convergence of the observation operator
+                        converged = True
+                    else:
+                        converged = True
         #                if is_robust and converged:
         #                    break
         #                    # TODO robust re-masking
         #                    # We should have a robust mechanism that checks whether the state
         #                    # is too far from the observations, and if so, flag them as
         #                    # outliers
-                        if converged:
-                            break
+                    if converged:
+                        break
                 if converged:
                     break # out of the bands loop (first while statement)
             return x_analysis, P_analysis
 
     def solver ( self, observations, mask, H_matrix, x_forecast, P_forecast,
                 R_mat, the_metadata):
-        x_analysis, P_analysis = linear_diagonal_solver (observations, mask,
-                                                         H_matrix, x_forecast,
-                                                         P_forecast, R_mat,
-                                                         the_metadata)
-        return x_analysis, P_analysis
+        x_analysis, P_analysis, innovations_prime = linear_diagonal_solver (
+            observations, mask, H_matrix, self.n_params, x_forecast,
+            P_forecast, R_mat, the_metadata)
+        return x_analysis, P_analysis, innovations_prime
 
 

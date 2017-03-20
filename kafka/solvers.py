@@ -38,10 +38,10 @@ __license__ = "GPLv3"
 __email__ = "j.gomez-dans@ucl.ac.uk"
 
 
-def linear_diagonal_solver ( observations, mask, H_matrix,
+def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
             x_forecast, P_forecast, R_mat, the_metadata, approx_diagonal=True):
     LOG.info("Squeezing prior covariance...")
-                                  n_params=self.n_params)
+                                  #n_params=self.n_params)
     P_forecast_prime = np.array(P_forecast.diagonal()).squeeze()[mask.ravel()]
                 
 
@@ -61,7 +61,7 @@ def linear_diagonal_solver ( observations, mask, H_matrix,
         kalman_gain = kalman_gain/S
     LOG.info("Squeeze x_forecast")
     x_forecast_prime = matrix_squeeze(x_forecast, mask=mask.ravel(),
-                                                          n_params=self.n_params)
+                                                          n_params=n_params)
     LOG.info("Calculating innovations")
     innovations_prime = (observations.ravel()[mask.ravel()] -
                                              H_matrix.dot(x_forecast_prime))
@@ -69,19 +69,22 @@ def linear_diagonal_solver ( observations, mask, H_matrix,
     x_analysis_prime = x_forecast_prime + \
                                            kalman_gain*innovations_prime
     LOG.info("Calculating analysis covariance")
-    P_analysis_prime = ((sp.eye(kalman_gain.shape[0],
-                                                    kalman_gain.shape[0])
-                                       - kalman_gain*H_matrix)*P_forecast_prime)
+    P_analysis_prime = (np.ones_like(P_forecast_prime) -
+                        kalman_gain*H_matrix)*P_forecast_prime
+    tmp_matrix = sp.eye(nn1)
+    tmp_matrix.setdiag(P_analysis_prime)
+    P_analysis_prime = tmp_matrix
+
     # Now move
     LOG.info("Inflating analysis state")
     x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
-                                        mask.ravel(), n_params=self.n_params)
+                                        mask.ravel(), n_params=n_params)
     LOG.info("Analsysis smalld diagonal, useful as preconditioner")
     small_diagonal = np.array(P_analysis_prime.diagonal()).squeeze()
     big_diagonal = np.array(P_forecast.diagonal()).squeeze()
     LOG.info("Inflate analysis covariance")
     P_analysis_diag = reconstruct_array(small_diagonal, big_diagonal,
-                                    mask, n_params=self.n_params)
+                                    mask, n_params=n_params)
     P_analysis = sp.dia_matrix ( (P_analysis_diag, 0),
                                     shape=P_forecast.shape)
-    return x_analysis, P_analysis
+    return x_analysis, P_analysis, innovations_prime
