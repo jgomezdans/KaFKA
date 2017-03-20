@@ -250,7 +250,7 @@ class LinearKalman (object):
                     else:
                         H_matrix = self.create_observation_operator(the_metadata,
                                                     x_forecast, band)
-                        
+
                     x_analysis, P_analysis = self.solver (observations, mask, H_matrix,
                                                           x_forecast, P_forecast, R_mat, the_metadata)
 
@@ -279,8 +279,10 @@ class LinearKalman (object):
 
     def solver ( self, observations, mask, H_matrix, x_forecast, P_forecast,
                 R_mat, the_metadata):
-        x_analysis, P_analysis = linear_diagonal_solver (observations, mask, 
-                                                         H_matrix, x_forecast, 
-                                                         P_forecast, R_mat, 
+        x_analysis, P_analysis = linear_diagonal_solver (observations, mask,
+                                                         H_matrix, x_forecast,
+                                                         P_forecast, R_mat,
                                                          the_metadata)
         return x_analysis, P_analysis
+
+
