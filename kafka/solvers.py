@@ -88,3 +88,20 @@ def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
     P_analysis = sp.dia_matrix ( (P_analysis_diag, 0),
                                     shape=P_forecast.shape)
     return x_analysis, P_analysis, innovations_prime
+
+
+def kalman_divide_conquer( observations, mask, H_matrix, n_params,
+            x_forecast, P_forecast, R_mat, the_metadata, approx_diagonal=True):
+    """This function solves the problem "one pixel at a time" kind of strategy
+    """
+
+def variational_kalman( observations, mask, H_matrix, n_params,
+            x_forecast, P_forecast, R_mat, the_metadata, approx_diagonal=True):
+    """We can just use """
+
+    A = H_matrix.T.dot(R_mat).dot(H_matrix) + P_forecast_inv
+    b = H_matrix.T.dot(R_mat).dot(observations) + P_forecast_inv.dot(x_forecast)
+    # Here we can either do a spLU of A, and solve, or we can have a first go
+    # by assuming P_forecast_inv is diagonal, and use the inverse of A_approx as
+    # a preconditioner
+

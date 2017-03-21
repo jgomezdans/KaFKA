@@ -33,6 +33,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.sparse as sp
 from linear_kf import LinearKalman
+from solvers import variational_kalman, kalman_divide_conquer
 import gp_emulator
 import gdal
 # metadata is now different as it has angles innit
@@ -95,3 +96,9 @@ class NonLinearKalman (LinearKalman):
         LOG.debug("\tDone!")
         return H_matrix.tocsr()
 
+    def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
+                R_mat, the_metadata):
+        x_analysis, P_analysis, innovations_prime = variational_kalman (
+            observations, mask, H_matrix, self.n_params, x_forecast,
+            P_forecast, R_mat, the_metadata)
+        return x_analysis, P_analysis, innovations_prime
