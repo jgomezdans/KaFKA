@@ -253,6 +253,7 @@ class OutputFile(object):
 
         yo = self.nc.createVariable('y', 'f4', ('y'))
         yo.units = 'm'
+        yo.standard_name = 'projection_y_coordinate'
         self.nc.Conventions = 'CF-1.7'
         # create container variable for CRS: x/y WKT
         try:
