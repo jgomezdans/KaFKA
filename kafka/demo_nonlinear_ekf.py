@@ -188,10 +188,41 @@ if __name__ == "__main__":
     # test methods
     bhr, R_mat, mask, metadata = kalman._get_observations_timestep(1,
                                                                    band=0)
-    x0 = np.ones(7 * 512 * 512) * 0.5
-    P_forecast = sp.dia_matrix((7*512*512, 7*512*512))
-    P_forecast.setdiag(np.ones(7 * 512 * 512) * 0.1)
-    kalman.run(x0, P_forecast,
+    n_pixels = 512*512
+    
+    x0 = np.r_[ 0.17*np.ones(n_pixels), 1.0*np.ones(n_pixels), 0.1*np.ones(n_pixels),
+                0.7*np.ones(n_pixels), 2.0*np.ones(n_pixels), 0.18*np.ones(n_pixels),
+                1.5*np.ones(n_pixels)]
+    sigma = np.r_[ 0.12*np.ones(n_pixels), .7*np.ones(n_pixels), 0.0959*np.ones(n_pixels),
+                0.15*np.ones(n_pixels), 1.5*np.ones(n_pixels), 0.2*np.ones(n_pixels),
+                5.*np.ones(n_pixels)]
+    sigma_inv = np.r_[ (1./(0.12*0.12))*np.ones(n_pixels), 
+                    (1./(.7*0.7))*np.ones(n_pixels), 
+                    563.380281*np.ones(n_pixels),
+                    (1./(0.15*0.15))*np.ones(n_pixels), 
+                    (1./(1.5*1.5))*np.ones(n_pixels), 
+                    5.06562204e+02*np.ones(n_pixels),
+                    0.04*np.ones(n_pixels)]
+    
+    P_forecast = sp.dia_matrix((7*n_pixels, 7*n_pixels))
+    P_forecast.setdiag(sigma**2)
+    off_diagonal = np.r_[np.zeros(n_pixels), np.zeros(n_pixels), 
+                         0.8862*0.0959*0.2*np.ones(n_pixels), 
+                         np.zeros(n_pixels)]
+    P_forecast.setdiag(off_diagonal, k=3*n_pixels)
+    P_forecast.setdiag(off_diagonal, k=-3*n_pixels)
+
+    off_diagonal_inv = np.r_[np.zeros(n_pixels), np.zeros(n_pixels), 
+                         -2.15254947e+02*np.ones(n_pixels), 
+                         np.zeros(n_pixels)]
+    
+    P_forecast_inv = sp.csr_matrix(P_forecast.shape)
+    P_forecast_inv.setdiag(sigma_inv)
+    P_forecast_inv.setdiag(off_diagonal_inv, k=3*n_pixels)
+    P_forecast_inv.setdiag(off_diagonal_inv, k=-3*n_pixels)
+    
+    
+    kalman.run(x0, P_forecast,P_forecast_inv,
                    diag_str="diagnostics",
                    approx_diagonal=True, refine_diag=False,
                    iter_obs_op=False, is_robust=False)
