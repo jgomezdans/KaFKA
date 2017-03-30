@@ -38,7 +38,6 @@ import gdal
 
 # Set up logging
 import logging
-logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger(__name__)
 
 # metadata is now different as it has angles innit
@@ -100,8 +99,10 @@ class BHRKalman (NonLinearKalman):
 
         R_mat[qa == 0] = np.maximum(2.5e-3, bhr[qa == 0] * 0.05)
         R_mat[qa == 1] = np.maximum(2.5e-3, bhr[qa == 1] * 0.07)
-        R_mat_sp = sp.csr_matrix((mask.sum(), mask.sum()))
-        R_mat_sp.setdiag(R_mat[mask])
+        N = mask.ravel().shape[0]
+        R_mat_sp = sp.lil_matrix((N, N))
+        R_mat_sp.setdiag(R_mat.ravel())
+        R_mat_sp = R_mat_sp.tocsr()
         
         metadata = Metadata(mask, R_mat_sp, band)
 
@@ -143,7 +144,7 @@ class BHRKalman (NonLinearKalman):
 
         M = np.ones((plot_obj.ny, plot_obj.nx)) * np.nan
         not_masked = mask.reshape((plot_obj.ny, plot_obj.nx))
-        M[not_masked] = innovation
+        M = innovation.reshape(M.shape)
         #plot_obj.axs[2].imshow(M, interpolation='nearest',
                                #cmap=cmap)
         #plot_obj.axs[2].set_title("Innovation")
@@ -166,6 +167,8 @@ class BHRKalman (NonLinearKalman):
 if __name__ == "__main__":
     import glob
     import cPickle
+    logging.basicConfig(level=logging.DEBUG, 
+                        format='%(asctime)s - %(levelname)s - %(message)s')
 
     files = glob.glob("/storage/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
     files.sort()
@@ -180,50 +183,47 @@ if __name__ == "__main__":
         doys.append(doy)
     doys = np.array(doys)
     mcd43_observations = MCD43_observations(doys, fnames_a1, fnames_a2)
+    LOG.info("Loading emulator")
     emulator = cPickle.load(open(
         "../SAIL_emulator_both_500trainingsamples.pkl", 'r'))
+    LOG.info("Emulator loaded")
     kalman = BHRKalman(emulator, mcd43_observations, doys,
                              mcd43_observations, [], [], n_params=7)
 
     # test methods
-    bhr, R_mat, mask, metadata = kalman._get_observations_timestep(1,
-                                                                   band=0)
+    #bhr, R_mat, mask, metadata = kalman._get_observations_timestep(1,
+    #                                                               band=0)
     n_pixels = 512*512
-    
-    x0 = np.r_[ 0.17*np.ones(n_pixels), 1.0*np.ones(n_pixels), 0.1*np.ones(n_pixels),
-                0.7*np.ones(n_pixels), 2.0*np.ones(n_pixels), 0.18*np.ones(n_pixels),
-                1.5*np.ones(n_pixels)]
-    sigma = np.r_[ 0.12*np.ones(n_pixels), .7*np.ones(n_pixels), 0.0959*np.ones(n_pixels),
-                0.15*np.ones(n_pixels), 1.5*np.ones(n_pixels), 0.2*np.ones(n_pixels),
-                5.*np.ones(n_pixels)]
-    sigma_inv = np.r_[ (1./(0.12*0.12))*np.ones(n_pixels), 
-                    (1./(.7*0.7))*np.ones(n_pixels), 
-                    563.380281*np.ones(n_pixels),
-                    (1./(0.15*0.15))*np.ones(n_pixels), 
-                    (1./(1.5*1.5))*np.ones(n_pixels), 
-                    5.06562204e+02*np.ones(n_pixels),
-                    0.04*np.ones(n_pixels)]
-    
-    P_forecast = sp.dia_matrix((7*n_pixels, 7*n_pixels))
-    P_forecast.setdiag(sigma**2)
-    off_diagonal = np.r_[np.zeros(n_pixels), np.zeros(n_pixels), 
-                         0.8862*0.0959*0.2*np.ones(n_pixels), 
-                         np.zeros(n_pixels)]
-    P_forecast.setdiag(off_diagonal, k=3*n_pixels)
-    P_forecast.setdiag(off_diagonal, k=-3*n_pixels)
+    # Defining the prior
+    sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 5])
+    x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, 1.5])
+    x0 = np.array([x0 for i in xrange(n_pixels)]).flatten()
+    # The individual covariance matrix
+    little_p = np.diag ( sigma**2).astype(np.float32)
+    little_p[5,2] = 0.8862*0.0959*0.2
+    little_p[2,5] = 0.8862*0.0959*0.2
 
-    off_diagonal_inv = np.r_[np.zeros(n_pixels), np.zeros(n_pixels), 
-                         -2.15254947e+02*np.ones(n_pixels), 
-                         np.zeros(n_pixels)]
+    inv_p = np.linalg.inv(little_p)
+    diag0 = inv_p.diagonal()
+    diag3 = inv_p.diagonal(offset=3)
+    diag = np.array([ diag0 for i in xrange(n_pixels)]).flatten()
+    P_forecast_inv = sp.dia_matrix((7*n_pixels, 7*n_pixels))
+    P_forecast_inv.setdiag(diag)
+    off_diagonal = np.c_[ [diag3 for i in xrange(n_pixels)]]
+
+    P_forecast_inv.setdiag(off_diagonal.flatten(), k=3)
+    P_forecast_inv.setdiag(off_diagonal.flatten(), k=-3)
+    P_forecast_inv=P_forecast_inv.tocsr()
     
-    P_forecast_inv = sp.csr_matrix(P_forecast.shape)
-    P_forecast_inv.setdiag(sigma_inv)
-    P_forecast_inv.setdiag(off_diagonal_inv, k=3*n_pixels)
-    P_forecast_inv.setdiag(off_diagonal_inv, k=-3*n_pixels)
-    
-    
-    kalman.run(x0, P_forecast,P_forecast_inv,
+    Q = np.ones(n_pixels*7)*0.1
+    Q[-n_pixels:] = 1. # LAI
+    kalman.set_trajectory_model ( 512, 512)
+    kalman.set_trajectory_uncertainty(Q, 512, 512)
+
+    # Need to set the trajectory model and uncertainty inflation
+    # Prior needs to be reorganised to be block diagonal
+    kalman.run(x0, None, P_forecast_inv,
                    diag_str="diagnostics",
                    approx_diagonal=True, refine_diag=False,
-                   iter_obs_op=False, is_robust=False)
+                   iter_obs_op=True, is_robust=False)
 
