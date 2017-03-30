@@ -44,7 +44,6 @@ MCD43_observations = namedtuple('MCD43_observations',
 
 # Set up logging
 import logging
-logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger(__name__)
 
 class NonLinearKalman (LinearKalman):
@@ -60,6 +59,10 @@ class NonLinearKalman (LinearKalman):
                               diagnostics=diagnostics,
                               n_params=n_params)
         self.emulator = emulator
+        
+    def _dump_output(self, ii, timestep, x_analysis, P_analysis, 
+                               P_analysis_inverse):
+        pass
 
     def create_observation_operator(self, metadata, x_forecast, band):
         """Using an emulator of the nonlinear model around `x_forecast`.
@@ -68,12 +71,12 @@ class NonLinearKalman (LinearKalman):
         (e.g. leaf single scattering albedo in two bands, etc.). This
         is achieved by using the `state_mapper` to select which bits
         of the state vector (and model Jacobian) are used."""
-        LOG.debug("Creating the ObsOp for band %d" % band)
+        LOG.info("Creating the ObsOp for band %d" % band)
         n_times = x_forecast.shape[0]/self.n_params
         good_obs = metadata.mask.sum()
         
         
-        H_matrix = sp.lil_matrix ( (good_obs, self.n_params*good_obs),
+        H_matrix = sp.lil_matrix ( (n_times, self.n_params*n_times),
                                  dtype=np.float32)
         # So the model has spectral components. 
         if band == 0:
@@ -83,22 +86,26 @@ class NonLinearKalman (LinearKalman):
             # ssa, asym, LAI, rsoil
             state_mapper = np.array([3,4,6,5])
         
-        x0 = np.zeros((good_obs, 4))
-        for i,j in enumerate(state_mapper):
-            x0[:, i] = (x_forecast[(j*n_times):((j+1)*n_times)]
-                        [metadata.mask.ravel()])
-        
-        _, H0 = self.emulator.predict(x0, do_unc=False)
-
-        for i in xrange(good_obs):
-            ilocs = [(i+j*good_obs) for j in state_mapper]
-            H_matrix[i, ilocs] = H0[i]
-        LOG.debug("\tDone!")
+        x0 = np.zeros((n_times, 4))
+        for i in xrange(n_times):
+            if metadata.mask.ravel()[i]:
+                x0[i, :] = x_forecast[state_mapper + self.n_params*i]
+        LOG.info("Running emulators") 
+        _, H0 = self.emulator.predict(x0[metadata.mask.ravel()], do_unc=False)
+        n = 0
+        LOG.info("Storing emulators in H matrix")
+        for i in xrange(n_times):
+            if metadata.mask.ravel()[i]:
+                H_matrix[i, state_mapper + self.n_params*i] = H0[n]
+                n += 1
+        LOG.info("\tDone!")
         return H_matrix.tocsr()
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
-                R_mat, the_metadata):
-        x_analysis, P_analysis, innovations_prime = variational_kalman (
-            observations, mask, H_matrix, self.n_params, x_forecast,
-            P_forecast, R_mat, the_metadata)
-        return x_analysis, P_analysis, innovations_prime
+                P_forecast_inv, R_mat, the_metadata):
+        x_analysis, P_analysis, P_analysis_inv, innovations_prime = \
+            variational_kalman (
+            observations, H_matrix, self.n_params, x_forecast,
+            P_forecast, P_forecast_inv, the_metadata)
+        
+        return x_analysis, P_analysis, P_analysis_inv, innovations_prime
