@@ -29,7 +29,6 @@ from solvers import linear_diagonal_solver
 
 # Set up logging
 import logging
-logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger(__name__)
 
 
@@ -139,15 +138,15 @@ class LinearKalman (object):
                 self.metadata[timestep].uncertainty[band], mask)
         return observations, R_mat, mask.ravel(), self.metadata[timestep]
 
-    def set_trajectory_model(self):
+    def set_trajectory_model(self, nx, ny):
         """In a Kalman filter, the state is progated from time `t` to `t+1`
         using a model. We assume that this model is a matrix, and for the time
         being, the matrix is the identity matrix. That's how we roll!"""
-        n = self.observations.shape[1]*self.observations.shape[2]
+        n = nx*ny
         self.trajectory_model = sp.eye(self.n_params*n, self.n_params*n,
                                        format="csr")
 
-    def set_trajectory_uncertainty(self, Q):
+    def set_trajectory_uncertainty(self, Q, nx, ny):
         """In a Kalman filter, the model that propagates the state from time
         `t` to `t+1` is assumed to be *wrong*, and this is indicated by having
         additive Gaussian noise, which we assume is zero-mean, and controlled by
@@ -158,7 +157,7 @@ class LinearKalman (object):
         Q: array
             The main diagonal of the model uncertainty covariance matrix.
         """
-        n = self.observations.shape[1]*self.observations.shape[2]
+        n = nx*ny 
         self.trajectory_uncertainty = sp.eye(self.n_params*n, self.n_params*n,
                                        format="csr").dot(Q)
 
@@ -184,8 +183,17 @@ class LinearKalman (object):
         # If P_analysis_inverse is block_diagonal.... EASY
         # see notes
         x_forecast = self.trajectory_model.dot(x_analysis)
-        if sp.issparse(self.trajectory_uncertainty):
+        if sp.issparse(self.trajectory_uncertainty) and P_analysis is not None:
             P_forecast = P_analysis + self.trajectory_uncertainty
+        elif sp.issparse(self.trajectory_uncertainty) and P_analysis is None:
+            LOG.info("Updating prior *invese covariance*")
+            LOG.info("Only updates main diagonal")
+            diag = 1./P_analysis_inverse.diagonal()
+            P_approx = sp.dia_matrix((diag, 0), shape=P_analysis.shape) + \
+                self.trajectory_uncertainty
+            P_forecast_inverse = P_analysis_inverse.copy()
+            P_forecast_inverse.setdiag( 1./P_approx.diagonal() )
+            
         else:
             trajectory_uncertainty = sp.dia_matrix((self.trajectory_uncertainty,
                                                     0), shape=P_analysis.shape)

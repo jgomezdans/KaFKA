@@ -107,8 +107,8 @@ if __name__ == "__main__":
     output_array = np.zeros((100, 50, 50))
     output_unc = np.zeros((100, 50, 50))
     kalman_filter = TestKalman(data, time_steps, QA, output_array, output_unc)
-    kalman_filter.set_trajectory_model()
-    kalman_filter.set_trajectory_uncertainty(0.005)
+    kalman_filter.set_trajectory_model(50, 50)
+    kalman_filter.set_trajectory_uncertainty(0.005, 50,50)
     x_f = 0.5*np.ones(50*50).ravel()
 
     P_f = sp.eye(50*50, 50*50, format="csr", dtype=np.float32)
