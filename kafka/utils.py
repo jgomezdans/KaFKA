@@ -34,6 +34,8 @@ import datetime as dt
 import os
 import gdal
 
+import logging
+LOG = logging.getLogger(__name__)
 
 def spsolve2(a, b):
     a_lu = spl.splu(a.tocsc()) # LU decomposition for sparse a
