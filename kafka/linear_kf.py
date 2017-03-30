@@ -178,8 +178,11 @@ class LinearKalman (object):
         H_matrix = sp.dia_matrix(np.eye (good_obs))
         return H_matrix
 
-    def advance(self, x_analysis, P_analysis):
+    def advance(self, x_analysis, P_analysis, P_analysis_inverse):
         """Advance the state"""
+        # Needs to deal with the inverse analysis matrix ;-/
+        # If P_analysis_inverse is block_diagonal.... EASY
+        # see notes
         x_forecast = self.trajectory_model.dot(x_analysis)
         if sp.issparse(self.trajectory_uncertainty):
             P_forecast = P_analysis + self.trajectory_uncertainty
@@ -188,9 +191,9 @@ class LinearKalman (object):
                                                     0), shape=P_analysis.shape)
             P_forecast = P_analysis + trajectory_uncertainty
 
-        return x_forecast, P_forecast
+        return x_forecast, P_forecast, P_forecast_inverse
 
-    def run(self, x_forecast, P_forecast,
+    def run(self, x_forecast, P_forecast, P_forecast_inverse,
                    diag_str="diagnostics",
                    band=None, approx_diagonal=True, refine_diag=True,
                    iter_obs_op=False, is_robust=False):
@@ -203,7 +206,8 @@ class LinearKalman (object):
                         if x == timestep]
 
             if not is_first:
-                x_forecast, P_forecast = self.advance(x_analysis, P_analysis)
+                x_forecast, P_forecast, P_forecast_inverse = self.advance(
+                    x_analysis, P_analysis, P_analysis_inverse)
             is_first = False
             if len(locate_times) == 0:
                 # Just advance the time
@@ -211,16 +215,19 @@ class LinearKalman (object):
             else:
                 # We do have data, so we assimilate
 
-                x_analysis, P_analysis = self.assimilate (locate_times,
-                                     x_forecast, P_forecast,
+                x_analysis, P_analysis, P_analysis_inverse = self.assimilate (
+                                     locate_times, x_forecast, P_forecast,
+                                     P_forecast_inverse,
                                      approx_diagonal=approx_diagonal,
                                      refine_diag=refine_diag,
                                      iter_obs_op=iter_obs_op,
                                      is_robust=is_robust, diag_str=diag_str)
 
-            self._dump_output(ii, timestep, x_analysis, P_analysis)
+            self._dump_output(ii, timestep, x_analysis, P_analysis, 
+                              P_analysis_inverse)
 
-    def assimilate(self, locate_times, x_forecast, P_forecast,
+    def assimilate(self, locate_times, x_forecast, P_forecast, 
+                   P_forecast_inverse,
                    approx_diagonal=True, refine_diag=False,
                    iter_obs_op=False, is_robust=False, diag_str="diag"):
         """The method assimilates the observatins at timestep `timestep`, using
@@ -229,8 +236,15 @@ class LinearKalman (object):
         for step in locate_times:
             LOG.info("Assimilating %d..." % step)
             # This first loop iterates the solution for all bands
+            # We store the forecast to compare convergence after one 
+            # iteration
+            x_prev = x_forecast*1.
+            converged = False
+            n_iter = 0
             while True:
+                n_iter += 1
                 for band in xrange(self.bands_per_observation):
+                    LOG.info("Band %d" % band)
                     # Extract observations, mask and uncertainty for the current time
                     if self.bands_per_observation == 1:
                         observations, R_mat, mask, the_metadata = \
@@ -245,15 +259,19 @@ class LinearKalman (object):
                         self._plotter_iteration_start(plot_object, x_forecast,
                                                       observations, mask )
                     if self.bands_per_observation == 1:
+                        # Remember that x_prev is the value that the iteration
+                        # is working on. Starts with x_forecast, but updated
                         H_matrix = self.create_observation_operator(the_metadata,
-                                                    x_forecast, None)
+                                                    x_prev, None)
                     else:
                         H_matrix = self.create_observation_operator(the_metadata,
-                                                    x_forecast, band)
-
-                    x_analysis, P_analysis, innovations_prime  = self.solver(
-                        observations, mask, H_matrix,
-                        x_forecast, P_forecast, R_mat, the_metadata)
+                                                    x_prev, band)
+                    # the mother of all function calls
+                    x_analysis, P_analysis, P_analysis_inverse, \
+                        innovations_prime  = self.solver(
+                            observations, mask, H_matrix,
+                            x_forecast, P_forecast, P_forecast_inverse, 
+                            R_mat, the_metadata)
 
 
                     if self.diagnostics:
@@ -261,28 +279,32 @@ class LinearKalman (object):
                                                         P_analysis,
                                                         innovations_prime, mask)
 
-                    if iter_obs_op:
-                        # TODO test for convergence of the observation operator
+                if iter_obs_op:
+                    # this should be an option...
+                    maska = np.concatenate([mask.ravel() 
+                                            for i in xrange(self.n_params)]) 
+                    convergence_norm = np.linalg.norm(x_analysis[maska] - 
+                                            x_prev[maska])/float(maska.sum())
+                    if convergence_norm <= 1e-3:
                         converged = True
-                    else:
-                        converged = True
+                        LOG.info("Converged (%g)!!!"%convergence_norm)
+                    x_prev = x_analysis
+                    LOG.info("Iteration convergence: %g" %(convergence_norm))
         #                if is_robust and converged:
         #                    break
         #                    # TODO robust re-masking
         #                    # We should have a robust mechanism that checks whether the state
         #                    # is too far from the observations, and if so, flag them as
         #                    # outliers
-                    if converged:
-                        break
-                if converged:
-                    break # out of the bands loop (first while statement)
-            return x_analysis, P_analysis
+                if converged and n_iter > 3:
+                    break
+            return x_analysis, P_analysis, P_analysis_inverse
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
-                R_mat, the_metadata):
-        x_analysis, P_analysis, innovations_prime = linear_diagonal_solver (
+                P_forecast_inverse, the_metadata):
+        x_analysis, P_analysis, P_analysis_inverse = linear_diagonal_solver (
             observations, mask, H_matrix, self.n_params, x_forecast,
             P_forecast, R_mat, the_metadata)
-        return x_analysis, P_analysis, innovations_prime
+        return x_analysis, P_analysis, P_analysis_inverse, innovations_prime
 
 
