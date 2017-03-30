@@ -90,18 +90,38 @@ def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
     return x_analysis, P_analysis, innovations_prime
 
 
-def kalman_divide_conquer( observations, mask, H_matrix, n_params,
-            x_forecast, P_forecast, R_mat, the_metadata, approx_diagonal=True):
+def kalman_divide_conquer( observations, H_matrix, n_params,
+            x_forecast, P_forecast, the_metadata, approx_diagonal=True):
     """This function solves the problem "one pixel at a time" kind of strategy
     """
 
-def variational_kalman( observations, mask, H_matrix, n_params,
-            x_forecast, P_forecast, R_mat, the_metadata, approx_diagonal=True):
+def variational_kalman( observations, H_matrix, n_params,
+            x_forecast, P_forecast, P_forecast_inv, the_metadata, approx_diagonal=True):
     """We can just use """
-
+    LOG.info("Squeezing prior covariance...")
+    mask = the_metadata.mask
+    maska = np.concatenate([mask.ravel() for i in xrange(n_params)]) 
+    #Pinv = 1./np.array(P_forecast.diagonal()).squeeze()[maska]
+    #P_forecast_inv = sp.eye(Pinv.shape[0])
+    #P_forecast_inv.setdiag(Pinv)
+    LOG.info("Creating linear problem")
+    R_mat = the_metadata.uncertainty
+    y = observations.ravel()#[mask.ravel()]
+    y[~mask.ravel()] = 0.
+    #Aa = matrix_squeeze (P_forecast_inv, mask=maska.ravel())
     A = H_matrix.T.dot(R_mat).dot(H_matrix) + P_forecast_inv
-    b = H_matrix.T.dot(R_mat).dot(observations) + P_forecast_inv.dot(x_forecast)
+    b = H_matrix.T.dot(R_mat).dot(y) + P_forecast_inv.dot (x_forecast)
     # Here we can either do a spLU of A, and solve, or we can have a first go
     # by assuming P_forecast_inv is diagonal, and use the inverse of A_approx as
     # a preconditioner
-
+    LOG.info("Solving")
+    AI = sp.linalg.splu ( A )
+    x_analysis = AI.solve (b)
+    # So retval is the solution vector and A is the Hessian 
+    # (->inv(A) is posterior cov)
+    innovations = y - H_matrix.dot(x_analysis)
+    LOG.info("Inflating analysis state")
+    #x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
+    #                                    mask.ravel(), n_params=n_params)
+    
+    return x_analysis, None, A, innovations
