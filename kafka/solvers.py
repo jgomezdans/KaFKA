@@ -27,7 +27,6 @@ from utils import  matrix_squeeze, spsolve2, reconstruct_array
 
 # Set up logging
 import logging
-logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger(__name__)
 
 
