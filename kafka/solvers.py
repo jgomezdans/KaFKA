@@ -27,7 +27,7 @@ from utils import  matrix_squeeze, spsolve2, reconstruct_array
 
 # Set up logging
 import logging
-LOG = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__+".solvers")
 
 
 __author__ = "J Gomez-Dans"
@@ -97,6 +97,8 @@ def kalman_divide_conquer( observations, H_matrix, n_params,
 def variational_kalman( observations, H_matrix, n_params,
             x_forecast, P_forecast, P_forecast_inv, the_metadata, approx_diagonal=True):
     """We can just use """
+    
+    H0, H_matrix = H_matrix
     LOG.info("Squeezing prior covariance...")
     mask = the_metadata.mask
     maska = np.concatenate([mask.ravel() for i in xrange(n_params)]) 
@@ -107,6 +109,7 @@ def variational_kalman( observations, H_matrix, n_params,
     R_mat = the_metadata.uncertainty
     y = observations.ravel()#[mask.ravel()]
     y[~mask.ravel()] = 0.
+    y = y - H0 + H_matrix.dot(x_forecast)
     #Aa = matrix_squeeze (P_forecast_inv, mask=maska.ravel())
     A = H_matrix.T.dot(R_mat).dot(H_matrix) + P_forecast_inv
     b = H_matrix.T.dot(R_mat).dot(y) + P_forecast_inv.dot (x_forecast)

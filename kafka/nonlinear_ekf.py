@@ -44,7 +44,7 @@ MCD43_observations = namedtuple('MCD43_observations',
 
 # Set up logging
 import logging
-LOG = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__+".nonlinear_ekf")
 
 class NonLinearKalman (LinearKalman):
     """A class that extends to non linear models"""
@@ -78,6 +78,9 @@ class NonLinearKalman (LinearKalman):
         
         H_matrix = sp.lil_matrix ( (n_times, self.n_params*n_times),
                                  dtype=np.float32)
+
+        H0 = np.zeros(n_times, dtype=np.float32)
+
         # So the model has spectral components. 
         if band == 0:
             # ssa, asym, LAI, rsoil
@@ -91,15 +94,16 @@ class NonLinearKalman (LinearKalman):
             if metadata.mask.ravel()[i]:
                 x0[i, :] = x_forecast[state_mapper + self.n_params*i]
         LOG.info("Running emulators") 
-        _, H0 = self.emulator.predict(x0[metadata.mask.ravel()], do_unc=False)
+        H0_, dH = self.emulator.predict(x0[metadata.mask.ravel()], do_unc=False)
         n = 0
         LOG.info("Storing emulators in H matrix")
         for i in xrange(n_times):
             if metadata.mask.ravel()[i]:
-                H_matrix[i, state_mapper + self.n_params*i] = H0[n]
+                H_matrix[i, state_mapper + self.n_params*i] = dH[n]
+                H0[i] = H0_[n]
                 n += 1
         LOG.info("\tDone!")
-        return H_matrix.tocsr()
+        return (H0, H_matrix.tocsr())
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
                 P_forecast_inv, R_mat, the_metadata):

@@ -29,7 +29,7 @@ from solvers import linear_diagonal_solver
 
 # Set up logging
 import logging
-LOG = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__+".linear_kf")
 
 
 __author__ = "J Gomez-Dans"
@@ -159,7 +159,8 @@ class LinearKalman (object):
         """
         n = nx*ny 
         self.trajectory_uncertainty = sp.eye(self.n_params*n, self.n_params*n,
-                                       format="csr").dot(Q)
+                                       format="csr")
+        self.trajectory_uncertainty.setdiag(Q)
 
     def create_uncertainty(self, uncertainty, mask):
         """Creates the observational uncertainty matrix. We assume that
@@ -189,10 +190,12 @@ class LinearKalman (object):
             LOG.info("Updating prior *invese covariance*")
             LOG.info("Only updates main diagonal")
             diag = 1./P_analysis_inverse.diagonal()
-            P_approx = sp.dia_matrix((diag, 0), shape=P_analysis.shape) + \
+            P_approx = sp.dia_matrix((diag, 0), 
+                                     shape=P_analysis_inverse.shape) + \
                 self.trajectory_uncertainty
             P_forecast_inverse = P_analysis_inverse.copy()
             P_forecast_inverse.setdiag( 1./P_approx.diagonal() )
+            P_forecast = None
             
         else:
             trajectory_uncertainty = sp.dia_matrix((self.trajectory_uncertainty,
@@ -207,13 +210,14 @@ class LinearKalman (object):
                    iter_obs_op=False, is_robust=False):
         is_first = True
         for ii,timestep in enumerate(np.arange(self.observation_times.min(),
-                                  self.observation_times.max() + 1)):
+                                  self.observ.dot(Q)ation_times.max() + 1)):
             # First locate all available observations for time step of interest.
             # Note that there could be more than one...
             locate_times = [i for i, x in enumerate(self.observation_times)
                         if x == timestep]
 
             if not is_first:
+                LOG.info("Advancing state, timestep %d" % timestep)
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
                     x_analysis, P_analysis, P_analysis_inverse)
             is_first = False
@@ -250,17 +254,31 @@ class LinearKalman (object):
             converged = False
             n_iter = 0
             while True:
+                if n_iter == 0:
+                    # Read in the data for all bands so we don't have 
+                    # to read it many times.
+                    cached_obs = []
+                    for band in xrange(self.bands_per_observation):
+                        if self.bands_per_observation == 1:
+                            observations, R_mat, mask, the_metadata = \
+                                self._get_observations_timestep(step, None)
+                        else:
+                            observations, R_mat, mask, the_metadata = \
+                                self._get_observations_timestep(step, band)
+                        cached_obs.append ( (observations, R_mat, mask, 
+                                           the_metadata) )
+                        
                 n_iter += 1
                 for band in xrange(self.bands_per_observation):
                     LOG.info("Band %d" % band)
                     # Extract observations, mask and uncertainty for the current time
-                    if self.bands_per_observation == 1:
-                        observations, R_mat, mask, the_metadata = \
-                            self._get_observations_timestep(step, None)
-                    else:
-                        observations, R_mat, mask, the_metadata = \
-                            self._get_observations_timestep(step, band)
-
+                    #if self.bands_per_observation == 1:
+                        #observations, R_mat, mask, the_metadata = \
+                            #self._get_observations_timestep(step, None)
+                    #else:
+                        #observations, R_mat, mask, the_metadata = \
+                            #self._get_observations_timestep(step, band)
+                    observations, R_mat, mask, the_metadata = cached_obs[band]
                     if self.diagnostics:
                         LOG.info("Setting up diagnostics...")
                         plot_object = self._set_plot_view(diag_str, step, observations)
@@ -293,18 +311,19 @@ class LinearKalman (object):
                                             for i in xrange(self.n_params)]) 
                     convergence_norm = np.linalg.norm(x_analysis[maska] - 
                                             x_prev[maska])/float(maska.sum())
-                    if convergence_norm <= 1e-3:
+                    if convergence_norm <= 5e-6:
                         converged = True
-                        LOG.info("Converged (%g)!!!"%convergence_norm)
+                        LOG.info("Converged (%g) !!!"%convergence_norm)
                     x_prev = x_analysis
-                    LOG.info("Iteration convergence: %g" %(convergence_norm))
+                    LOG.info("Iteration %d convergence: %g" %( n_iter, 
+                                                            convergence_norm))
         #                if is_robust and converged:
         #                    break
         #                    # TODO robust re-masking
         #                    # We should have a robust mechanism that checks whether the state
         #                    # is too far from the observations, and if so, flag them as
         #                    # outliers
-                if converged and n_iter > 3:
+                if converged and n_iter > 1:
                     break
             return x_analysis, P_analysis, P_analysis_inverse
 

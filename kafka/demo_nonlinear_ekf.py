@@ -38,7 +38,7 @@ import gdal
 
 # Set up logging
 import logging
-LOG = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__+".demo_nonlinear_kf")
 
 # metadata is now different as it has angles innit
 Metadata = namedtuple('Metadata', 'mask uncertainty band')
@@ -65,12 +65,13 @@ class BHRKalman (NonLinearKalman):
 
         TODO Needs a clearer interface to subset parts of the image,
         as it's currently done rather crudely."""
-
+        LOG.info("Reading data for timestep %d, band %d" % (timestep, band))
         if band == 0:
             band = "vis"
         elif band == 1:
             band = "nir"
         #time_loc = self.observations.doys == timestep
+        LOG.info("\tReading Parameters")
         fich = self.observations.mcd43a1[timestep]
         to_BHR = np.array([1.0, 0.189184, -1.377622])
         fname = 'HDF4_EOS:EOS_GRID:"' + \
@@ -84,10 +85,12 @@ class BHRKalman (NonLinearKalman):
         bhr = np.where(mask,
                        data * to_BHR[:, None, None], np.nan).sum(axis=0)
         fich = self.observations.mcd43a2[timestep]
+        LOG.info("\tReading QA")
         fname = 'HDF4_EOS:EOS_GRID:' + \
                 '"{0:s}":MOD_Grid_BRDF:BRDF_Albedo_Quality'.format(fich)
         g = gdal.Open(fname)
         qa = g.ReadAsArray()[:512, :512]
+        LOG.info("\tReading Snow")
         fname = 'HDF4_EOS:EOS_GRID:' + \
                 '"{0:s}":MOD_Grid_BRDF:Snow_BRDF_Albedo'.format(fich)
         g = gdal.Open(fname)
@@ -105,7 +108,8 @@ class BHRKalman (NonLinearKalman):
         R_mat_sp = R_mat_sp.tocsr()
         
         metadata = Metadata(mask, R_mat_sp, band)
-
+        LOG.info("%d non-masked pixels" % mask.sum())
+        LOG.info("\tDone with pre-processing MCD43 observations")
         return bhr, R_mat_sp, mask, metadata
 
 
@@ -168,7 +172,7 @@ if __name__ == "__main__":
     import glob
     import cPickle
     logging.basicConfig(level=logging.DEBUG, 
-                        format='%(asctime)s - %(levelname)s - %(message)s')
+                        format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 
     files = glob.glob("/storage/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
     files.sort()
@@ -217,6 +221,7 @@ if __name__ == "__main__":
     
     Q = np.ones(n_pixels*7)*0.1
     Q[-n_pixels:] = 1. # LAI
+    
     kalman.set_trajectory_model ( 512, 512)
     kalman.set_trajectory_uncertainty(Q, 512, 512)
 
