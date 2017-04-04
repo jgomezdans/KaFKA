@@ -112,7 +112,8 @@ if __name__ == "__main__":
     x_f = 0.5*np.ones(50*50).ravel()
 
     P_f = sp.eye(50*50, 50*50, format="csr", dtype=np.float32)
+    P_f_inv = None
 
 
-    kalman_filter.run(x_f, P_f, refine_diag=True)
+    kalman_filter.run(x_f, P_f, P_f_inv, refine_diag=True)
 

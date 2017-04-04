@@ -72,7 +72,8 @@ class LinearKalman (object):
         """We call this diagnostic method at the **END** of the iteration"""
         pass
 
-    def _dump_output(self, step, timestep, x_analysis, P_analysis):
+    def _dump_output(self, step, timestep, x_analysis, P_analysis,
+                     P_analysis_inverse):
         """Store the output somewhere for further use. This method is called
         after each time step, so if several observations are available within
         the same timestep, it will be the combined result of all observations.
@@ -186,6 +187,7 @@ class LinearKalman (object):
         x_forecast = self.trajectory_model.dot(x_analysis)
         if sp.issparse(self.trajectory_uncertainty) and P_analysis is not None:
             P_forecast = P_analysis + self.trajectory_uncertainty
+            P_forecast_inverse = None
         elif sp.issparse(self.trajectory_uncertainty) and P_analysis is None:
             LOG.info("Updating prior *invese covariance*")
             LOG.info("Only updates main diagonal")
@@ -201,6 +203,7 @@ class LinearKalman (object):
             trajectory_uncertainty = sp.dia_matrix((self.trajectory_uncertainty,
                                                     0), shape=P_analysis.shape)
             P_forecast = P_analysis + trajectory_uncertainty
+            P_forecast_inverse = None
 
         return x_forecast, P_forecast, P_forecast_inverse
 
@@ -210,7 +213,7 @@ class LinearKalman (object):
                    iter_obs_op=False, is_robust=False):
         is_first = True
         for ii,timestep in enumerate(np.arange(self.observation_times.min(),
-                                  self.observ.dot(Q)ation_times.max() + 1)):
+                                  self.observation_times.max() + 1)):
             # First locate all available observations for time step of interest.
             # Note that there could be more than one...
             locate_times = [i for i, x in enumerate(self.observation_times)
@@ -323,15 +326,18 @@ class LinearKalman (object):
         #                    # We should have a robust mechanism that checks whether the state
         #                    # is too far from the observations, and if so, flag them as
         #                    # outliers
+                else:
+                    break
                 if converged and n_iter > 1:
                     break
             return x_analysis, P_analysis, P_analysis_inverse
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
-                P_forecast_inverse, the_metadata):
+                P_forecast_inverse, R_mat, the_metadata):
         x_analysis, P_analysis, P_analysis_inverse = linear_diagonal_solver (
             observations, mask, H_matrix, self.n_params, x_forecast,
             P_forecast, R_mat, the_metadata)
+        innovations_prime = H_matrix.dot(x_analysis[mask])
         return x_analysis, P_analysis, P_analysis_inverse, innovations_prime
 
 
