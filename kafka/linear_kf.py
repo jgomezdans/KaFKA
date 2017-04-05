@@ -59,7 +59,7 @@ class LinearKalman (object):
         self.diagnostics = diagnostics
         self.bands_per_observation = bands_per_observation
 
-    def _set_plot_view (self, diag_string, timestep):
+    def _set_plot_view (self, diag_string, timestep, obs):
         """This sets out the plot view for each iteration. Please override this
         method with whatever you want."""
         pass
@@ -218,7 +218,9 @@ class LinearKalman (object):
             # Note that there could be more than one...
             locate_times = [i for i, x in enumerate(self.observation_times)
                         if x == timestep]
-
+            
+            LOG.info("timestep %d" % timestep)
+            
             if not is_first:
                 LOG.info("Advancing state, timestep %d" % timestep)
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
@@ -226,9 +228,11 @@ class LinearKalman (object):
             is_first = False
             if len(locate_times) == 0:
                 # Just advance the time
+                LOG.info("No observations in this time")
                 continue
             else:
                 # We do have data, so we assimilate
+                LOG.info("# of Observations: %d" % len(locate_times))
 
                 x_analysis, P_analysis, P_analysis_inverse = self.assimilate (
                                      locate_times, x_forecast, P_forecast,
@@ -330,14 +334,15 @@ class LinearKalman (object):
                     break
                 if converged and n_iter > 1:
                     break
-            return x_analysis, P_analysis, P_analysis_inverse
+        return x_analysis, P_analysis, P_analysis_inverse
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
                 P_forecast_inverse, R_mat, the_metadata):
-        x_analysis, P_analysis, P_analysis_inverse = linear_diagonal_solver (
-            observations, mask, H_matrix, self.n_params, x_forecast,
-            P_forecast, R_mat, the_metadata)
-        innovations_prime = H_matrix.dot(x_analysis[mask])
+        x_analysis, P_analysis, P_analysis_inverse, innovations_prime = \
+            linear_diagonal_solver (
+                observations, mask, H_matrix, self.n_params, x_forecast,
+                P_forecast, R_mat, the_metadata)
+
         return x_analysis, P_analysis, P_analysis_inverse, innovations_prime
 
 

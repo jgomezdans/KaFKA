@@ -39,25 +39,35 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 
 def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
             x_forecast, P_forecast, R_mat, the_metadata, approx_diagonal=True):
+    
     LOG.info("Squeezing prior covariance...")
-                                  #n_params=self.n_params)
-    P_forecast_prime = np.array(P_forecast.diagonal()).squeeze()[mask.ravel()]
+                                  
+    the_mask = np.array([mask.ravel() for i in xrange(n_params)]).ravel() 
+    # Only diagonal considered
+    P_forecast_prime = np.array(P_forecast.diagonal()).squeeze()[the_mask]
                 
 
     # At this stage, we have a forecast (prior), the observations
     # and the observation operator, so we proceed with the
     # assimilation
-    if approx_diagonal:
-        # We approximate the inverse matrix by a division assuming
-        # P_forecast is diagonal
-        LOG.info("Diagonal approximation")
-        R_mat_prime = np.array(R_mat.diagonal()).squeeze()
-        S = H_matrix.dot(H_matrix.T)*P_forecast_prime + R_mat_prime
-        nn1 = R_mat_prime.shape[0]
-        LOG.info("About to calculate approx KGain")
-        kalman_gain = P_forecast_prime*np.array(H_matrix.diagonal()).squeeze()
-        LOG.info("About to calculate approx KGain")
-        kalman_gain = kalman_gain/S
+    R_mat_prime = np.array(R_mat.diagonal()).squeeze()
+    A = sp.eye(P_forecast_prime.shape[0])
+    A.setdiag(P_forecast_prime)
+    S = (H_matrix.dot(A.dot(H_matrix.T))).diagonal() + R_mat_prime
+    nn1 = R_mat_prime.shape[0]
+    LOG.info("About to calculate approx KGain")
+    kalman_gain = A.dot(H_matrix.T).diagonal()
+    LOG.info("About to calculate approx KGain")
+    kalman_gain = kalman_gain/S
+    k = sp.eye(n_params*nn1, nn1, dtype=np.float32)
+    k.setdiag(kalman_gain)
+    kalman_gain = k
+    
+    
+    #if approx_diagonal:
+        ## We approximate the inverse matrix by a division assuming
+        ## P_forecast is diagonal
+        #LOG.info("Diagonal approximation")
     LOG.info("Squeeze x_forecast")
     x_forecast_prime = matrix_squeeze(x_forecast, mask=mask.ravel(),
                                                           n_params=n_params)
@@ -68,14 +78,17 @@ def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
     x_analysis_prime = x_forecast_prime + \
                                            kalman_gain*innovations_prime
     LOG.info("Calculating analysis covariance")
-    P_analysis_prime = (np.ones_like(P_forecast_prime) -
-                        kalman_gain*H_matrix)*P_forecast_prime
+    P_analysis_prime = (sp.eye(n_params*nn1, n_params*nn1, 
+                               dtype=np.float32) - (kalman_gain.dot(
+                                   H_matrix)).dot(A))
     tmp_matrix = sp.eye(nn1)
-    tmp_matrix.setdiag(P_analysis_prime)
+    tmp_matrix.setdiag(P_analysis_prime.diagonal())
+    P_analysis_prime = None
     P_analysis_prime = tmp_matrix
-
+    
     # Now move
     LOG.info("Inflating analysis state")
+    
     x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
                                         mask.ravel(), n_params=n_params)
     LOG.info("Analsysis smalld diagonal, useful as preconditioner")
@@ -86,7 +99,7 @@ def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
                                     mask, n_params=n_params)
     P_analysis = sp.dia_matrix ( (P_analysis_diag, 0),
                                     shape=P_forecast.shape)
-    return x_analysis, P_analysis, innovations_prime
+    return x_analysis, P_analysis, None, innovations_prime
 
 
 def kalman_divide_conquer( observations, H_matrix, n_params,

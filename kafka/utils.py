@@ -119,18 +119,17 @@ def reconstruct_array(a_matrix, b_matrix, mask, n_params=1):
     Returns
     --------
     The updated `b_matrix`"""
+    
+    if mask.ndim > 1:
+        mask = mask.ravel()
+    n = mask.shape[0] # big dimension
+    n_good = np.sum(mask)
+    ilocs = mask.nonzero()[0]
 
-    mask = mask.ravel()
     if a_matrix.ndim == 1:
-        n = mask.shape[0] # big dimension
-        n_good = mask.sum()
-        ilocs = mask.nonzero()[0]
         for i in xrange(n_params):
             b_matrix[ilocs +i*n] = a_matrix[(i*n_good):((i+1)*n_good)]
     elif a_matrix.ndim == 2:
-        n = mask.shape[0] # big dimension
-        n_good = mask.sum()
-        ilocs = mask.nonzero()[0]
         for i in xrange(n_params):
             ii = 0
             for j in xrange(n):
