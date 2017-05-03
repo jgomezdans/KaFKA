@@ -174,7 +174,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, 
                         format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 
-    files = glob.glob("/storage/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
+    files = glob.glob("/data/selene/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
     files.sort()
     fnames_a1 = []
     fnames_a2 = []
