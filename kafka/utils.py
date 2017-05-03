@@ -367,6 +367,10 @@ class OutputFile(object):
         varo.set_auto_maskandscale(False)
         # varo[:,...] = vardata
 
+    def update_time(self, time, index=np.s_[:]):
+        varo = self.nc.variables['time']
+        varo[index] = time
+
     def update_variable(self, varname, vardata, group=None):
         """
         Appends data to a variable in the file.
