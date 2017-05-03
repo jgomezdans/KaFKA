@@ -368,6 +368,14 @@ class OutputFile(object):
         # varo[:,...] = vardata
 
     def update_time(self, time, index=np.s_[:]):
+        """
+        
+        :param time: array
+                    The times to be added to the time variable.
+        :param index: slice
+                    The slice defines where in the variable the times go.
+        :return: 
+        """
         varo = self.nc.variables['time']
         varo[index] = time
 
