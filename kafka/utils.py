@@ -270,8 +270,8 @@ class OutputFile(object):
         self.nc.createGroup(group)
 
 
-    def create_variable(self, group, varname, vardata,
-                        units, long_name, std_name, vartype='f4'):
+    def create_variable(self,  varname, vardata,
+                        units, long_name, std_name, vartype='f4', group=None):
         """
         Creates a variable in the file and add data to it. The idea being that
         this is where data gets stored.
@@ -279,8 +279,6 @@ class OutputFile(object):
         * Chunking!
         Parameters
         ----------
-        group : str
-            The netCDF group where the variable goes
         varname : str
             The variable name
         vardata : array
@@ -293,14 +291,19 @@ class OutputFile(object):
             The handy shorthand name
         vartype : str
             The variable type
-
+        group : str
+            The netCDF group where the variable goes
+            
         Returns
         -------
 
         """
-        self.create_empty_variable(group, varname, vardata.ndim,
-                              units, long_name, std_name, vartype=vartype)
-        varo = self.nc.groups[group].variables[varname]
+        self.create_empty_variable(varname, vardata.ndim, units, long_name,
+                                   std_name, vartype=vartype, group=group,)
+        if group is None:
+            varo = self.nc.variables[varname]
+        else:
+            varo = self.nc.groups[group].variables[varname]
         if vardata.ndim == 3:
             varo[:, :, :] = vardata
         elif vardata.ndim == 2:
@@ -308,8 +311,8 @@ class OutputFile(object):
         else:
             varo[:] = vardata
 
-    def create_empty_variable(self, group, varname, ndim,
-                              units, long_name, std_name, vartype='f4'):
+    def create_empty_variable(self, varname, ndim,
+                              units, long_name, std_name, vartype='f4', group=None):
         """
         Creates a variable in the file without adding data. The idea being that
         this is where data gets stored.
@@ -317,8 +320,6 @@ class OutputFile(object):
         * Chunking!
         Parameters
         ----------
-        group : str
-            The netCDF group where the variable goes
         varname : str
             The variable name
         ndim : array
@@ -331,46 +332,42 @@ class OutputFile(object):
             The handy shorthand name
         vartype : str
             The variable type
+        group : str
+            The netCDF group where the variable goes
 
         Returns
         -------
 
         """
         if ndim == 1:
-            varo = self.nc.groups[group].createVariable(varname, vartype,
-                                                        ('time'),
-                                                        zlib=True,
-                                                        chunksizes=[16],
-                                                        fill_value=-9999)
+            args = [varname, vartype, ('time'),]
+            kwargs = {'zlib':True, 'chunksizes':[16], 'fill_value':-9999}
         elif ndim == 2:
-            varo = self.nc.groups[group].createVariable(varname, vartype,
-                                                        ('y', 'x'),
-                                                        zlib=True,
-                                                        chunksizes=[12, 12],
-                                                        fill_value=-9999)
-            varo.grid_mapping = 'crs'
+            args = [varname, vartype, ('y', 'x')]
+            kwargs = {'zlib':True, 'chunksizes':[12, 12], 'fill_value':-9999}
         elif ndim == 3:
-            varo = self.nc.groups[group].createVariable(varname, vartype,
-                                                        ('time', 'y', 'x'),
-                                                        zlib=True,
-                                                        chunksizes=[16, 12, 12],
-                                                        fill_value=-9999)
-            varo.grid_mapping = 'crs'
+            args = [varname, vartype, ('time','y', 'x')]
+            kwargs = {'zlib':True, 'chunksizes':[16, 12, 12], 'fill_value':-9999}
         else:
-            varo = self.nc.groups[group].createVariable(varname, vartype,
-                                                        'scalar')
+            args = [varname, vartype, 'scalar']
+            kwargs = {}
+
+        if group is None:
+            varo = self.nc.createVariable(*args, **kwargs)
+        else:
+            varo = self.nc.groups[group].createVariable(*args, **kwargs)
+        if ndim in [2,3]:
+            varo.grid_mapping = 'crs'
 
         varo.units = units
         varo.scale_factor = 1.00
         varo.add_offset = 0.00
         varo.long_name = long_name
         varo.standard_name = std_name
-        # varo.grid_mapping = 'crs'
         varo.set_auto_maskandscale(False)
         # varo[:,...] = vardata
 
-
-    def update_variable(self, group, varname, vardata):
+    def update_variable(self, varname, vardata, group=None):
         """
         Appends data to a variable in the file.
         MISSING STUFF:
@@ -389,11 +386,18 @@ class OutputFile(object):
         -------
 
         """
-        try:
-            varo = self.nc.groups[group].variables[varname]
-        except KeyError:
-            print "Group ['{}'] and/or variable ['{}'] not in ncfile.".format(group, varname)
-            raise
+        if group is None:
+            try:
+                varo = self.nc.variables[varname]
+            except KeyError:
+                print "Variable ['{}'] not in ncfile.".format(varname)
+                raise
+        else:
+            try:
+                varo = self.nc.groups[group].variables[varname]
+            except KeyError:
+                print "Group ['{}'] and/or variable ['{}'] not in ncfile.".format(group, varname)
+                raise
         if varo.dimensions[0] != 'time':
             raise TypeError("Can only append to a variable with time dimension (dimensions {})".format(varo.dimensions))
         if varo.ndim == len(vardata.shape):
