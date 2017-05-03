@@ -72,11 +72,14 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         LOG.info("saving. Timestep %d, step %d" % (timestep, step))
         self.output.GetRasterBand(timestep+1).WriteArray(x)
         self.output.GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
-        plt.imshow(x, interpolation='nearest', vmin=-0.1, vmax=0.5)
-        plt.title("%d-%d" % (step, timestep))
-        plt.show()
-        a=raw_input("Next?")
-        plt.close()
+        LOG.info("**NOT** saving the whole state, only Isotropic. CHANGEME")
+        if timestep % 10 == 0:
+            self.output.FlushCache()
+        #plt.imshow(x, interpolation='nearest', vmin=-0.1, vmax=0.5)
+        #plt.title("%d-%d" % (step, timestep))
+        #plt.show()
+        #a=raw_input("Next?")
+        #plt.close()
         
 
     def _get_observations_timestep(self, timestep, band=None):
@@ -151,5 +154,8 @@ if __name__ == "__main__":
     P_forecast = sp.eye(3*n*n, 3*n*n, format="csc", dtype=np.float32)
     kf.set_trajectory_model(2400, 2400)
     kf.set_trajectory_uncertainty(0.005, 2400, 2400)
+    # The following runs the filter over time, selecting band 2 (NIR)
+    # In order to calcualte BB albedos, you need to run the filter over
+    # all bands, but you can do this in parallel
     kf.run(x_forecast, P_forecast, None, band=2, refine_diag=False)
     dst_ds = None
