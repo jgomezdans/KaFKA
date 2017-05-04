@@ -174,17 +174,25 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, 
                         format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 
-    files = glob.glob("/data/selene/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
-    files.sort()
+    files1 = glob.glob("/data/selene/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
+    files1.sort()
+    files2 = glob.glob("/data/selene/ucfajlg/Aurade_MODIS/MCD43/MCD43A2.A2010*.hdf")
+    files2.sort()
+
     fnames_a1 = []
     fnames_a2 = []
     doys = []
-    for fich in files:
+    for fich in files1:
         fname = fich.split("/")[-1]
+        timestring = fname.split(".")[1]
         doy = int(fname.split(".")[1][-3:])
         fnames_a1.append(fich)
-        fnames_a2.append(fich.replace("MCD43A1", "MCD43A2"))
+        for f2 in files2:
+            if f2.find(timestring) > 0:
+                fnames_a2.append(f2)
+                break
         doys.append(doy)
+    
     doys = np.array(doys)
     mcd43_observations = MCD43_observations(doys, fnames_a1, fnames_a2)
     LOG.info("Loading emulator")
