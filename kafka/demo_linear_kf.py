@@ -59,10 +59,10 @@ class TestKalman(LinearKalman):
         cmap = plt.cm.viridis
         cmap.set_bad = "0.8"
         plot_obj.axs[0].imshow (x.reshape(obs.shape), interpolation='nearest',
-                       cmap=cmap)
+                       cmap=cmap, vmin=0, vmax=1)
         plot_obj.axs[0].set_title("Prior state")
         plot_obj.axs[1].imshow(obs, interpolation='nearest',
-                      cmap=cmap)
+                      cmap=cmap, vmin=0, vmax=1)
         plot_obj.axs[1].set_title("Observations")
 
     def _plotter_iteration_end(self, plot_obj, x, P, innovation, mask):
@@ -76,7 +76,8 @@ class TestKalman(LinearKalman):
                        cmap=cmap)
         plot_obj.axs[2].set_title("Innovation")
         plot_obj.axs[3].imshow(x.reshape((plot_obj.ny, plot_obj.nx)),
-                               interpolation='nearest', cmap=cmap)
+                               interpolation='nearest', 
+                               cmap=cmap, vmin=0, vmax=1)
         plot_obj.axs[3].set_title("Posterior mean")
         unc = P.diagonal().reshape((plot_obj.ny, plot_obj.nx))
         plot_obj.axs[4].imshow(np.sqrt(unc),
@@ -107,12 +108,13 @@ if __name__ == "__main__":
     output_array = np.zeros((100, 50, 50))
     output_unc = np.zeros((100, 50, 50))
     kalman_filter = TestKalman(data, time_steps, QA, output_array, output_unc)
-    kalman_filter.set_trajectory_model()
-    kalman_filter.set_trajectory_uncertainty(0.005)
+    kalman_filter.set_trajectory_model(50, 50)
+    kalman_filter.set_trajectory_uncertainty(0.005, 50,50)
     x_f = 0.5*np.ones(50*50).ravel()
 
     P_f = sp.eye(50*50, 50*50, format="csr", dtype=np.float32)
+    P_f_inv = None
 
 
-    kalman_filter.run(x_f, P_f, refine_diag=True)
+    kalman_filter.run(x_f, P_f, P_f_inv, refine_diag=True)
 

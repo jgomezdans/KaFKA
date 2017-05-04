@@ -25,11 +25,11 @@ import numpy as np
 import scipy.sparse as sp
 
 from utils import  matrix_squeeze, spsolve2, reconstruct_array
+from solvers import linear_diagonal_solver
 
 # Set up logging
 import logging
-logging.basicConfig(level=logging.INFO)
-LOG = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__+".linear_kf")
 
 
 __author__ = "J Gomez-Dans"
@@ -59,7 +59,7 @@ class LinearKalman (object):
         self.diagnostics = diagnostics
         self.bands_per_observation = bands_per_observation
 
-    def _set_plot_view (self, diag_string, timestep):
+    def _set_plot_view (self, diag_string, timestep, obs):
         """This sets out the plot view for each iteration. Please override this
         method with whatever you want."""
         pass
@@ -72,7 +72,8 @@ class LinearKalman (object):
         """We call this diagnostic method at the **END** of the iteration"""
         pass
 
-    def _dump_output(self, step, timestep, x_analysis, P_analysis):
+    def _dump_output(self, step, timestep, x_analysis, P_analysis,
+                     P_analysis_inverse):
         """Store the output somewhere for further use. This method is called
         after each time step, so if several observations are available within
         the same timestep, it will be the combined result of all observations.
@@ -138,15 +139,15 @@ class LinearKalman (object):
                 self.metadata[timestep].uncertainty[band], mask)
         return observations, R_mat, mask.ravel(), self.metadata[timestep]
 
-    def set_trajectory_model(self):
+    def set_trajectory_model(self, nx, ny):
         """In a Kalman filter, the state is progated from time `t` to `t+1`
         using a model. We assume that this model is a matrix, and for the time
         being, the matrix is the identity matrix. That's how we roll!"""
-        n = self.observations.shape[1]*self.observations.shape[2]
+        n = nx*ny
         self.trajectory_model = sp.eye(self.n_params*n, self.n_params*n,
                                        format="csr")
 
-    def set_trajectory_uncertainty(self, Q):
+    def set_trajectory_uncertainty(self, Q, nx, ny):
         """In a Kalman filter, the model that propagates the state from time
         `t` to `t+1` is assumed to be *wrong*, and this is indicated by having
         additive Gaussian noise, which we assume is zero-mean, and controlled by
@@ -157,9 +158,10 @@ class LinearKalman (object):
         Q: array
             The main diagonal of the model uncertainty covariance matrix.
         """
-        n = self.observations.shape[1]*self.observations.shape[2]
+        n = nx*ny 
         self.trajectory_uncertainty = sp.eye(self.n_params*n, self.n_params*n,
-                                       format="csr").dot(Q)
+                                       format="csr")
+        self.trajectory_uncertainty.setdiag(Q)
 
     def create_uncertainty(self, uncertainty, mask):
         """Creates the observational uncertainty matrix. We assume that
@@ -177,19 +179,35 @@ class LinearKalman (object):
         H_matrix = sp.dia_matrix(np.eye (good_obs))
         return H_matrix
 
-    def advance(self, x_analysis, P_analysis):
+    def advance(self, x_analysis, P_analysis, P_analysis_inverse):
         """Advance the state"""
+        # Needs to deal with the inverse analysis matrix ;-/
+        # If P_analysis_inverse is block_diagonal.... EASY
+        # see notes
         x_forecast = self.trajectory_model.dot(x_analysis)
-        if sp.issparse(self.trajectory_uncertainty):
+        if sp.issparse(self.trajectory_uncertainty) and P_analysis is not None:
             P_forecast = P_analysis + self.trajectory_uncertainty
+            P_forecast_inverse = None
+        elif sp.issparse(self.trajectory_uncertainty) and P_analysis is None:
+            LOG.info("Updating prior *invese covariance*")
+            LOG.info("Only updates main diagonal")
+            diag = 1./P_analysis_inverse.diagonal()
+            P_approx = sp.dia_matrix((diag, 0), 
+                                     shape=P_analysis_inverse.shape) + \
+                self.trajectory_uncertainty
+            P_forecast_inverse = P_analysis_inverse.copy()
+            P_forecast_inverse.setdiag( 1./P_approx.diagonal() )
+            P_forecast = None
+            
         else:
             trajectory_uncertainty = sp.dia_matrix((self.trajectory_uncertainty,
                                                     0), shape=P_analysis.shape)
             P_forecast = P_analysis + trajectory_uncertainty
+            P_forecast_inverse = None
 
-        return x_forecast, P_forecast
+        return x_forecast, P_forecast, P_forecast_inverse
 
-    def run(self, x_forecast, P_forecast,
+    def run(self, x_forecast, P_forecast, P_forecast_inverse,
                    diag_str="diagnostics",
                    band=None, approx_diagonal=True, refine_diag=True,
                    iter_obs_op=False, is_robust=False):
@@ -200,26 +218,35 @@ class LinearKalman (object):
             # Note that there could be more than one...
             locate_times = [i for i, x in enumerate(self.observation_times)
                         if x == timestep]
-
+            
+            LOG.info("timestep %d" % timestep)
+            
             if not is_first:
-                x_forecast, P_forecast = self.advance(x_analysis, P_analysis)
+                LOG.info("Advancing state, timestep %d" % timestep)
+                x_forecast, P_forecast, P_forecast_inverse = self.advance(
+                    x_analysis, P_analysis, P_analysis_inverse)
             is_first = False
             if len(locate_times) == 0:
                 # Just advance the time
+                LOG.info("No observations in this time")
                 continue
             else:
                 # We do have data, so we assimilate
+                LOG.info("# of Observations: %d" % len(locate_times))
 
-                x_analysis, P_analysis = self.assimilate (locate_times,
-                                     x_forecast, P_forecast,
+                x_analysis, P_analysis, P_analysis_inverse = self.assimilate (
+                                     locate_times, x_forecast, P_forecast,
+                                     P_forecast_inverse,
                                      approx_diagonal=approx_diagonal,
                                      refine_diag=refine_diag,
                                      iter_obs_op=iter_obs_op,
                                      is_robust=is_robust, diag_str=diag_str)
 
-            self._dump_output(ii, timestep, x_analysis, P_analysis)
+            self._dump_output(ii, timestep, x_analysis, P_analysis, 
+                              P_analysis_inverse)
 
-    def assimilate(self, locate_times, x_forecast, P_forecast,
+    def assimilate(self, locate_times, x_forecast, P_forecast, 
+                   P_forecast_inverse,
                    approx_diagonal=True, refine_diag=False,
                    iter_obs_op=False, is_robust=False, diag_str="diag"):
         """The method assimilates the observatins at timestep `timestep`, using
@@ -228,105 +255,94 @@ class LinearKalman (object):
         for step in locate_times:
             LOG.info("Assimilating %d..." % step)
             # This first loop iterates the solution for all bands
+            # We store the forecast to compare convergence after one 
+            # iteration
+            x_prev = x_forecast*1.
+            converged = False
+            n_iter = 0
             while True:
+                if n_iter == 0:
+                    # Read in the data for all bands so we don't have 
+                    # to read it many times.
+                    cached_obs = []
+                    for band in xrange(self.bands_per_observation):
+                        if self.bands_per_observation == 1:
+                            observations, R_mat, mask, the_metadata = \
+                                self._get_observations_timestep(step, None)
+                        else:
+                            observations, R_mat, mask, the_metadata = \
+                                self._get_observations_timestep(step, band)
+                        cached_obs.append ( (observations, R_mat, mask, 
+                                           the_metadata) )
+                        
+                n_iter += 1
                 for band in xrange(self.bands_per_observation):
+                    LOG.info("Band %d" % band)
                     # Extract observations, mask and uncertainty for the current time
-                    if self.bands_per_observation == 1:
-                        observations, R_mat, mask, the_metadata = \
-                            self._get_observations_timestep(step, None)
-                    else:
-                        observations, R_mat, mask, the_metadata = \
-                            self._get_observations_timestep(step, band)
-
+                    #if self.bands_per_observation == 1:
+                        #observations, R_mat, mask, the_metadata = \
+                            #self._get_observations_timestep(step, None)
+                    #else:
+                        #observations, R_mat, mask, the_metadata = \
+                            #self._get_observations_timestep(step, band)
+                    observations, R_mat, mask, the_metadata = cached_obs[band]
                     if self.diagnostics:
+                        LOG.info("Setting up diagnostics...")
                         plot_object = self._set_plot_view(diag_str, step, observations)
                         self._plotter_iteration_start(plot_object, x_forecast,
                                                       observations, mask )
-
-                    # The assimilation works if data is there, so we need to reduce the
-                    # rank of the matrices by ignoring the masked data. `matrix_squeeze`
-                    # helps with this...
-
-                    P_forecast_prime = matrix_squeeze(P_forecast, mask=mask,
-                                                      n_params=self.n_params)
-
-                    # MAIN ITERATION loop
-                    # In an EKF, we would iterate and update the observation operator
-                    # until convergence is reached. If the observation operator is
-                    # linear, then no iterations are needed.
-                    while True:
-                        if self.bands_per_observation == 1:
-                            H_matrix = self.create_observation_operator(the_metadata,
-                                                                      x_forecast, None)
-                        else:
-                            H_matrix = self.create_observation_operator(the_metadata,
-                                                                      x_forecast, band)
-
-                        # At this stage, we have a forecast (prior), the observations
-                        # and the observation operator, so we proceed with the
-                        # assimilation
-                        if approx_diagonal:
-                            # We approximate the inverse matrix by a division assuming
-                            # P_forecast is diagonal
-
-                            R_mat_prime = np.array(R_mat.diagonal()).squeeze()
-
-                            S = (H_matrix.dot(P_forecast_prime)).dot(H_matrix.T) + R_mat
-                            nn1, nn2 = S.shape
-                            S_inv = sp.dia_matrix((
-                                [1./np.array(S.diagonal()).squeeze()],[0]),
-                                shape=(nn1, nn2))
-
-                            kalman_gain = P_forecast_prime.dot(H_matrix.T).dot(S_inv)
-
-                        if refine_diag:
-                            #P_forecast_prime = P_forecast_prime.todia()
-                            ####S = H_matrix.dot(P_forecast_prime).dot(H_matrix.T) + R_mat
-                            S = (H_matrix.T.dot(P_forecast_prime)).dot(H_matrix) + R_mat
-                            S = S.tocsc()
-                            XX = spsolve2(S.T, H_matrix).T # This might require some
-                            # speedups...
-                            kalman_gain1 = P_forecast_prime.dot (XX)
+                    if self.bands_per_observation == 1:
+                        # Remember that x_prev is the value that the iteration
+                        # is working on. Starts with x_forecast, but updated
+                        H_matrix = self.create_observation_operator(the_metadata,
+                                                    x_prev, None)
+                    else:
+                        H_matrix = self.create_observation_operator(the_metadata,
+                                                    x_prev, band)
+                    # the mother of all function calls
+                    x_analysis, P_analysis, P_analysis_inverse, \
+                        innovations_prime  = self.solver(
+                            observations, mask, H_matrix,
+                            x_forecast, P_forecast, P_forecast_inverse, 
+                            R_mat, the_metadata)
 
 
-                        x_forecast_prime = matrix_squeeze(x_forecast, mask=mask.ravel(),
-                                                          n_params=self.n_params)
-                        innovations_prime = (observations.ravel()[mask.ravel()] -
-                                             H_matrix.dot(x_forecast_prime))
-
-                        x_analysis_prime = x_forecast_prime + \
-                                           kalman_gain*innovations_prime
-                        P_analysis_prime = ((sp.eye(kalman_gain.shape[0], kalman_gain.shape[0])
-                                       - kalman_gain*H_matrix)*P_forecast_prime)
-                        # Now move
-                        x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
-                                                         mask.ravel(), n_params=self.n_params)
-                        small_diagonal = np.array(P_analysis_prime.diagonal()).squeeze()
-                        big_diagonal = np.array(P_forecast.diagonal()).squeeze()
-                        P_analysis_diag = reconstruct_array(small_diagonal, big_diagonal,
-                                                       mask, n_params=self.n_params)
-                        P_analysis = sp.dia_matrix ( (P_analysis_diag, 0),
-                                                     shape=P_forecast.shape)
-                        if self.diagnostics:
-                            self._plotter_iteration_end(plot_object, x_analysis,
+                    if self.diagnostics:
+                        self._plotter_iteration_end(plot_object, x_analysis,
                                                         P_analysis,
                                                         innovations_prime, mask)
 
-                        if iter_obs_op:
-                            # TODO test for convergence of the observation operator
-                            converged = True
-                        else:
-                            converged = True
+                if iter_obs_op:
+                    # this should be an option...
+                    maska = np.concatenate([mask.ravel() 
+                                            for i in xrange(self.n_params)]) 
+                    convergence_norm = np.linalg.norm(x_analysis[maska] - 
+                                            x_prev[maska])/float(maska.sum())
+                    if convergence_norm <= 5e-6:
+                        converged = True
+                        LOG.info("Converged (%g) !!!"%convergence_norm)
+                    x_prev = x_analysis
+                    LOG.info("Iteration %d convergence: %g" %( n_iter, 
+                                                            convergence_norm))
         #                if is_robust and converged:
         #                    break
         #                    # TODO robust re-masking
         #                    # We should have a robust mechanism that checks whether the state
         #                    # is too far from the observations, and if so, flag them as
         #                    # outliers
-                        if converged:
-                            break
-                if converged:
-                    break # out of the bands loop (first while statement)
-            return x_analysis, P_analysis
+                else:
+                    break
+                if converged and n_iter > 1:
+                    break
+        return x_analysis, P_analysis, P_analysis_inverse
+
+    def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
+                P_forecast_inverse, R_mat, the_metadata):
+        x_analysis, P_analysis, P_analysis_inverse, innovations_prime = \
+            linear_diagonal_solver (
+                observations, mask, H_matrix, self.n_params, x_forecast,
+                P_forecast, R_mat, the_metadata)
+
+        return x_analysis, P_analysis, P_analysis_inverse, innovations_prime
 
 

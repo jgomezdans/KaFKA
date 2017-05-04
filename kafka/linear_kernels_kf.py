@@ -51,7 +51,7 @@ class KernelLinearKalman (LinearKalman):
         LinearKalman.__init__(self, observations, observation_times,
                 observation_metadata, output_array, output_unc, n_params=3)
 
-    def create_observation_operator(self, metadata, x_forecast):
+    def create_observation_operator(self, metadata, x_forecast, band):
         """The linear kernel models..."""
 
         K = kernels.Kernels(metadata.vza[metadata.mask],

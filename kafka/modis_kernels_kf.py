@@ -28,16 +28,23 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 
 from collections import namedtuple
 import os
+os.environ['HDF5_DISABLE_VERSION_CHECK'] = "1"
 
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from geoh5 import kea
+#from geoh5 import kea
 import gdal
 
 from linear_kernels_kf import KernelLinearKalman
 from utils import OutputFile # The netCDF writer
+
+# Set up logging
+import logging
+logging.basicConfig(level=logging.INFO)
+LOG = logging.getLogger(__name__)
+
 
 # metadata is now different as it has angles innit
 Metadata = namedtuple('Metadata', 'mask uncertainty vza sza raa')
@@ -53,10 +60,27 @@ class MODISKernelLinearKalman (KernelLinearKalman):
     *NOTE* `observation_times` should refer to VRT bands, I think...
     """
     def __init__(self, observations, observation_times,
-                 output_array, output_unc):
+                 output_array, output_unc, the_band=1):
         observation_metadata=None
         KernelLinearKalman.__init__(self, observations, observation_times,
                               observation_metadata, output_array, output_unc)
+        self.the_band = the_band
+        
+    def _dump_output(self, step, timestep, x_analysis, P_analysis, 
+                     P_analysis_inverse):
+        x = x_analysis[:(2400*2400)].reshape((2400,2400))
+        LOG.info("saving. Timestep %d, step %d" % (timestep, step))
+        self.output.GetRasterBand(timestep+1).WriteArray(x)
+        self.output.GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
+        LOG.info("**NOT** saving the whole state, only Isotropic. CHANGEME")
+        if timestep % 10 == 0:
+            self.output.FlushCache()
+        #plt.imshow(x, interpolation='nearest', vmin=-0.1, vmax=0.5)
+        #plt.title("%d-%d" % (step, timestep))
+        #plt.show()
+        #a=raw_input("Next?")
+        #plt.close()
+        
 
     def _get_observations_timestep(self, timestep, band=None):
         """A method that reads in MODIS reflectance data from VRT files produced
@@ -71,7 +95,7 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         -------
         rho, R_mat, mask, metadata
         """
-        
+        LOG.info("Reading timestep >>> %d" % timestep)
         QA_OK = np.array([8, 72, 136, 200, 1032, 1288, 2056, 2120, 2184, 2248])
         qa = self.observations.qa.GetRasterBand(timestep+1).ReadAsArray()
         mask = np.in1d(qa, QA_OK).reshape((2400,2400))
@@ -80,13 +104,13 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         saa = self.observations.saa.GetRasterBand(timestep + 1).ReadAsArray()
         vaa = self.observations.vaa.GetRasterBand(timestep + 1).ReadAsArray()
         raa = vaa - saa
-        rho_pntr = self.observations[5 + band]
+        rho_pntr = self.observations[5 + self.the_band]
         rho = rho_pntr.GetRasterBand(timestep+1).ReadAsArray()/10000.
         # Taken from http://modis-sr.ltdri.org/pages/validation.html
         modis_uncertainty=np.array([0.005, 0.014, 0.008, 0.005, 0.012,
-                                    0.006, 0.003])
-        R_mat = self.create_uncertainty(modis_uncertainty[band], mask)
-        metadata = Metadata(mask, modis_uncertainty[band], 
+                                    0.006, 0.003])[self.the_band]
+        R_mat = self.create_uncertainty(modis_uncertainty, mask)
+        metadata = Metadata(mask, modis_uncertainty, 
                             vza/100., sza/100., raa/100.)
         return rho, R_mat, mask, metadata
 
@@ -94,7 +118,7 @@ class MODISKernelLinearKalman (KernelLinearKalman):
 
 
 if __name__ == "__main__":
-    the_dir="/storage/ucfajlg/Aurade_MODIS/"
+    the_dir="/data/selene/ucfajlg/Aurade_MODIS/"
     g = gdal.Open(the_dir + "brdf_2010_b01.vrt")
     days = np.array([int(g.GetRasterBand(i+1).GetMetadata()['DoY'])
                             for i in xrange(g.RasterCount)])
@@ -115,12 +139,23 @@ if __name__ == "__main__":
 
     # We can now create the output
     # stuff stuff stuff
+    drv = gdal.GetDriverByName("GTiff")
+    dst_ds = drv.Create ( "/tmp/nadir.tif", 2400, 2400, 366, gdal.GDT_Float32,
+                          [ 'COMPRESS=DEFLATE' ])
+    dst_ds.SetProjection ( modis_obs[1].GetProjection())
+    dst_ds.SetGeoTransform( modis_obs[1].GetGeoTransform())
+    
 
-    output = OutputFile("/tmp/testme.nc", times=days, x=np.array(2400),
-                        y=np.array(2400))
-    kf = MODISKernelLinearKalman( modis_obs, days, [], [] )
+    #output = OutputFile("/tmp/testme.nc", times=None, x=np.arange(2400),
+    #                    y=np.arange(2400))
+    kf = MODISKernelLinearKalman( modis_obs, days, dst_ds, [] )
     n = 2400
     x_forecast = np.ones(3*2400*2400)*0.5
     P_forecast = sp.eye(3*n*n, 3*n*n, format="csc", dtype=np.float32)
-    kf.run(x_forecast, P_forecast, band=2, refine_diag=False)
-        
+    kf.set_trajectory_model(2400, 2400)
+    kf.set_trajectory_uncertainty(0.005, 2400, 2400)
+    # The following runs the filter over time, selecting band 2 (NIR)
+    # In order to calcualte BB albedos, you need to run the filter over
+    # all bands, but you can do this in parallel
+    kf.run(x_forecast, P_forecast, None, band=2, refine_diag=False)
+    dst_ds = None

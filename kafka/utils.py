@@ -34,6 +34,8 @@ import datetime as dt
 import os
 import gdal
 
+import logging
+LOG = logging.getLogger(__name__)
 
 def spsolve2(a, b):
     a_lu = spl.splu(a.tocsc()) # LU decomposition for sparse a
@@ -87,7 +89,10 @@ def matrix_squeeze (a_matrix, mask=None, n_params=1):
         # This is different for vector and matrix
         if a_matrix.ndim == 2:
             # Just subset by mask location in rows/cols
-            a_matrix_squeezed = a_matrix[m, :][:, m]
+            if a_matrix.getformat() == "dia":
+                a_matrix_squeezed = a_matrix.tocsr()[m, :][:, m]
+            else:
+                a_matrix_squeezed = a_matrix[m, :][:, m]
         elif a_matrix.ndim == 1: # vector
             # Same, but just in one dimension
             a_matrix_squeezed = np.zeros(n_params*n)
@@ -114,18 +119,17 @@ def reconstruct_array(a_matrix, b_matrix, mask, n_params=1):
     Returns
     --------
     The updated `b_matrix`"""
+    
+    if mask.ndim > 1:
+        mask = mask.ravel()
+    n = mask.shape[0] # big dimension
+    n_good = np.sum(mask)
+    ilocs = mask.nonzero()[0]
 
-    mask = mask.ravel()
     if a_matrix.ndim == 1:
-        n = mask.shape[0] # big dimension
-        n_good = mask.sum()
-        ilocs = mask.nonzero()[0]
         for i in xrange(n_params):
             b_matrix[ilocs +i*n] = a_matrix[(i*n_good):((i+1)*n_good)]
     elif a_matrix.ndim == 2:
-        n = mask.shape[0] # big dimension
-        n_good = mask.sum()
-        ilocs = mask.nonzero()[0]
         for i in xrange(n_params):
             ii = 0
             for j in xrange(n):
