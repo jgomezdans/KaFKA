@@ -45,6 +45,110 @@ Metadata = namedtuple('Metadata', 'mask uncertainty band')
 MCD43_observations = namedtuple('MCD43_observations',
                         'doys mcd43a1 mcd43a2')
 
+def block_diag(mats, format=None, dtype=None):
+    """
+    Build a block diagonal sparse matrix from provided matrices.
+
+    Parameters
+    ----------
+    mats : sequence of matrices
+        Input matrices. Can be any combination of lists, numpy.array,
+         numpy.matrix or sparse matrix ("csr', 'coo"...)
+    format : str, optional
+        The sparse format of the result (e.g. "csr").  If not given, the matrix
+        is returned in "coo" format.
+    dtype : dtype specifier, optional
+        The data-type of the output matrix.  If not given, the dtype is
+        determined from that of `blocks`.
+
+    Returns
+    -------
+    res : sparse matrix
+
+    Notes
+    -----
+    Providing a sequence of equally shaped matrices
+     will provide marginally faster results
+
+    .. versionadded:: 0.18.0
+
+    See Also
+    --------
+    bmat, diags, block_diag
+
+    Examples
+    --------
+    >>> from scipy.sparse import coo_matrix, block_diag
+    >>> A = coo_matrix([[1, 2], [3, 4]])
+    >>> B = coo_matrix([[5, 6], [7, 8]])
+    >>> C = coo_matrix([[9, 10], [11,12]])
+    >>> block_diag((A, B, C)).toarray()
+    array([[ 1,  2,  0,  0,  0,  0],
+           [ 3,  4,  0,  0,  0,  0],
+           [ 0,  0,  5,  6,  0,  0],
+           [ 0,  0,  7,  8,  0,  0],
+           [ 0,  0,  0,  0,  9, 10],
+           [ 0,  0,  0,  0, 11, 12]])
+    """
+    import scipy.sparse as sp
+    import scipy.sparse.sputils as spu
+    from scipy.sparse.sputils import upcast, get_index_dtype
+
+    from scipy.sparse.csr import csr_matrix
+    from scipy.sparse.csc import csc_matrix
+    from scipy.sparse.bsr import bsr_matrix
+    from scipy.sparse.coo import coo_matrix
+    from scipy.sparse.dia import dia_matrix
+
+    from scipy.sparse import issparse
+
+
+    n = len(mats)
+    mats_ = [None] * n
+    for ia, a in enumerate(mats):
+        if hasattr(a, 'shape'):
+            mats_[ia] = a
+        else:
+            mats_[ia] = coo_matrix(a)
+
+    if any(mat.shape != mats_[-1].shape for mat in mats_) or (
+            any(issparse(mat) for mat in mats_)):
+        data = []
+        col = []
+        row = []
+        origin = np.array([0, 0], dtype=np.int)
+        for mat in mats_:
+            if issparse(mat):
+                data.append(mat.data)
+                row.append(mat.row + origin[0])
+                col.append(mat.col + origin[1])
+
+            else:
+                data.append(mat.ravel())
+                row_, col_ = np.indices(mat.shape)
+                row.append(row_.ravel() + origin[0])
+                col.append(col_.ravel() + origin[1])
+
+            origin += mat.shape
+
+        data = np.hstack(data)
+        col = np.hstack(col)
+        row = np.hstack(row)
+        total_shape = origin
+    else:
+        shape = mats_[0].shape
+        data = np.array(mats_, dtype).ravel()
+        row_, col_ = np.indices(shape)
+        row = (np.tile(row_.ravel(), n) +
+               np.arange(n).repeat(shape[0] * shape[1]) * shape[0]).ravel()
+        col = (np.tile(col_.ravel(), n) +
+               np.arange(n).repeat(shape[0] * shape[1]) * shape[1]).ravel()
+        total_shape = (shape[0] * n, shape[1] * n)
+
+    return coo_matrix((data, (row, col)), shape=total_shape).asformat(format)
+
+
+
 class BHRKalman (NonLinearKalman):
     """The non-linear EKF working on MODIS MCD43 C5 data"""
     def __init__(self, emulator, observations, observation_times,
@@ -98,7 +202,7 @@ class BHRKalman (NonLinearKalman):
         # qa used to define R_mat **and** mask. Don't know what to do with
         # snow information really... Ignore it?
         mask = mask * (qa != 255)  # This is OK pixels
-        R_mat = bhr * 0.0
+        R_mat = np.zeros_like(bhr)
 
         R_mat[qa == 0] = np.maximum(2.5e-3, bhr[qa == 0] * 0.05)
         R_mat[qa == 1] = np.maximum(2.5e-3, bhr[qa == 1] * 0.07)
@@ -153,8 +257,14 @@ class BHRKalman (NonLinearKalman):
                                #cmap=cmap)
         #plot_obj.axs[2].set_title("Innovation")
         n_pixels = plot_obj.nx*plot_obj.ny
+        plot_obj.axs[0][1].imshow(mask, interpolation='nearest', 
+                                  cmap=plt.cm.gray)
         for i in xrange(self.n_params):
-            plot_obj.axs[1][i].imshow(x[(i*n_pixels):((i+1)*n_pixels)].reshape
+            #plot_obj.axs[1][i].imshow(x[(i*n_pixels):((i+1)*n_pixels)].reshape
+            #                          ((plot_obj.ny, plot_obj.nx)),
+            #                   interpolation='nearest', cmap=cmap)
+            print type(x)  
+            plot_obj.axs[1][i].imshow(x[i::self.n_params].reshape
                                       ((plot_obj.ny, plot_obj.nx)),
                                interpolation='nearest', cmap=cmap)
         #plot_obj.axs[3].set_title("Posterior mean")
@@ -216,16 +326,11 @@ if __name__ == "__main__":
     little_p[2,5] = 0.8862*0.0959*0.2
 
     inv_p = np.linalg.inv(little_p)
-    diag0 = inv_p.diagonal()
-    diag3 = inv_p.diagonal(offset=3)
-    diag = np.array([ diag0 for i in xrange(n_pixels)]).flatten()
-    P_forecast_inv = sp.dia_matrix((7*n_pixels, 7*n_pixels))
-    P_forecast_inv.setdiag(diag)
-    off_diagonal = np.c_[ [diag3 for i in xrange(n_pixels)]]
+    xlist = [inv_p for m in xrange(n_pixels)]
 
-    P_forecast_inv.setdiag(off_diagonal.flatten(), k=3)
-    P_forecast_inv.setdiag(off_diagonal.flatten(), k=-3)
-    P_forecast_inv=P_forecast_inv.tocsr()
+    
+    P_forecast_inv=block_diag(xlist, dtype=np.float32)
+    
     
     Q = np.ones(n_pixels*7)*0.1
     Q[-n_pixels:] = 1. # LAI

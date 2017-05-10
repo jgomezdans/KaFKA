@@ -104,8 +104,12 @@ def variational_kalman( observations, H_matrix, n_params,
     #P_forecast_inv.setdiag(Pinv)
     LOG.info("Creating linear problem")
     R_mat = the_metadata.uncertainty
-    y = observations.ravel()#[mask.ravel()]
-    y[~mask.ravel()] = 0.
+    y = np.zeros_like(observations)
+    y[mask] = observations[mask]
+    y = y.ravel()
+    import pdb;pdb.set_trace()
+    #y = observations.ravel()#[mask.ravel()]
+    #y[~mask.ravel()] = 0.
     y = y - H0 + H_matrix.dot(x_forecast)
     #Aa = matrix_squeeze (P_forecast_inv, mask=maska.ravel())
     A = H_matrix.T.dot(R_mat).dot(H_matrix) + P_forecast_inv

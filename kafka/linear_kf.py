@@ -299,6 +299,7 @@ class LinearKalman (object):
                     else:
                         H_matrix = self.create_observation_operator(the_metadata,
                                                     x_prev, band)
+                    import pdb; pdb.set_trace()
                     # the mother of all function calls
                     x_analysis, P_analysis, P_analysis_inverse, \
                         innovations_prime  = self.solver(
@@ -346,6 +347,7 @@ class LinearKalman (object):
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
                 P_forecast_inverse, R_mat, the_metadata):
+
         x_analysis, P_analysis, P_analysis_inverse, innovations_prime = \
             linear_diagonal_solver (
                 observations, mask, H_matrix, self.n_params, x_forecast,
