@@ -140,15 +140,16 @@ if __name__ == "__main__":
     # We can now create the output
     # stuff stuff stuff
     drv = gdal.GetDriverByName("GTiff")
-    dst_ds = drv.Create ( "/tmp/nadir.tif", 2400, 2400, 366, gdal.GDT_Float32,
-                          [ 'COMPRESS=DEFLATE' ])
-    dst_ds.SetProjection ( modis_obs[1].GetProjection())
-    dst_ds.SetGeoTransform( modis_obs[1].GetGeoTransform())
+    dst_ds = drv.Create ("tmp/nadir.tif", 2400, 2400, 366, gdal.GDT_Float32,
+                          ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 'PREDICTOR=1',
+                           'TILED=YES'])
+    dst_ds.SetProjection(modis_obs[1].GetProjection())
+    dst_ds.SetGeoTransform(modis_obs[1].GetGeoTransform())
     
 
     #output = OutputFile("/tmp/testme.nc", times=None, x=np.arange(2400),
     #                    y=np.arange(2400))
-    kf = MODISKernelLinearKalman( modis_obs, days, dst_ds, [] )
+    kf = MODISKernelLinearKalman(modis_obs, days, dst_ds, [] )
     n = 2400
     x_forecast = np.ones(3*2400*2400)*0.5
     P_forecast = sp.eye(3*n*n, 3*n*n, format="csc", dtype=np.float32)
