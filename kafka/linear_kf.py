@@ -332,8 +332,16 @@ class LinearKalman (object):
         #                    # outliers
                 else:
                     break
+
                 if converged and n_iter > 1:
                     break
+
+		if n_iter >= 10:
+                    # Break if we go over 10 iterations
+                    LOG.info("Wow, too many iterations (%d)!"%n_iter)
+                    LOG.info("Stopping iterations here")
+		    break
+
         return x_analysis, P_analysis, P_analysis_inverse
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
