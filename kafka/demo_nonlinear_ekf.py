@@ -32,9 +32,12 @@ from collections import namedtuple
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.sparse as sp
-from nonlinear_ekf import NonLinearKalman
+
 import gp_emulator
 import gdal
+
+from nonlinear_ekf import NonLinearKalman
+from utils import block_diag
 
 # Set up logging
 import logging
@@ -44,6 +47,9 @@ LOG = logging.getLogger(__name__+".demo_nonlinear_kf")
 Metadata = namedtuple('Metadata', 'mask uncertainty band')
 MCD43_observations = namedtuple('MCD43_observations',
                         'doys mcd43a1 mcd43a2')
+
+
+
 
 class BHRKalman (NonLinearKalman):
     """The non-linear EKF working on MODIS MCD43 C5 data"""
@@ -98,7 +104,7 @@ class BHRKalman (NonLinearKalman):
         # qa used to define R_mat **and** mask. Don't know what to do with
         # snow information really... Ignore it?
         mask = mask * (qa != 255)  # This is OK pixels
-        R_mat = bhr * 0.0
+        R_mat = np.zeros_like(bhr)
 
         R_mat[qa == 0] = np.maximum(2.5e-3, bhr[qa == 0] * 0.05)
         R_mat[qa == 1] = np.maximum(2.5e-3, bhr[qa == 1] * 0.07)
@@ -153,8 +159,14 @@ class BHRKalman (NonLinearKalman):
                                #cmap=cmap)
         #plot_obj.axs[2].set_title("Innovation")
         n_pixels = plot_obj.nx*plot_obj.ny
+        plot_obj.axs[0][1].imshow(mask, interpolation='nearest', 
+                                  cmap=plt.cm.gray)
         for i in xrange(self.n_params):
-            plot_obj.axs[1][i].imshow(x[(i*n_pixels):((i+1)*n_pixels)].reshape
+            #plot_obj.axs[1][i].imshow(x[(i*n_pixels):((i+1)*n_pixels)].reshape
+            #                          ((plot_obj.ny, plot_obj.nx)),
+            #                   interpolation='nearest', cmap=cmap)
+            print type(x)  
+            plot_obj.axs[1][i].imshow(x[i::self.n_params].reshape
                                       ((plot_obj.ny, plot_obj.nx)),
                                interpolation='nearest', cmap=cmap)
         #plot_obj.axs[3].set_title("Posterior mean")
@@ -216,16 +228,11 @@ if __name__ == "__main__":
     little_p[2,5] = 0.8862*0.0959*0.2
 
     inv_p = np.linalg.inv(little_p)
-    diag0 = inv_p.diagonal()
-    diag3 = inv_p.diagonal(offset=3)
-    diag = np.array([ diag0 for i in xrange(n_pixels)]).flatten()
-    P_forecast_inv = sp.dia_matrix((7*n_pixels, 7*n_pixels))
-    P_forecast_inv.setdiag(diag)
-    off_diagonal = np.c_[ [diag3 for i in xrange(n_pixels)]]
+    xlist = [inv_p for m in xrange(n_pixels)]
 
-    P_forecast_inv.setdiag(off_diagonal.flatten(), k=3)
-    P_forecast_inv.setdiag(off_diagonal.flatten(), k=-3)
-    P_forecast_inv=P_forecast_inv.tocsr()
+    
+    P_forecast_inv=block_diag(xlist, dtype=np.float32)
+    
     
     Q = np.ones(n_pixels*7)*0.1
     Q[-n_pixels:] = 1. # LAI
