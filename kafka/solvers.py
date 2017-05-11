@@ -107,7 +107,6 @@ def variational_kalman( observations, H_matrix, n_params,
     y = np.zeros_like(observations)
     y[mask] = observations[mask]
     y = y.ravel()
-    import pdb;pdb.set_trace()
     #y = observations.ravel()#[mask.ravel()]
     #y[~mask.ravel()] = 0.
     y = y - H0 + H_matrix.dot(x_forecast)

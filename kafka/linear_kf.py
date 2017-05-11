@@ -299,7 +299,6 @@ class LinearKalman (object):
                     else:
                         H_matrix = self.create_observation_operator(the_metadata,
                                                     x_prev, band)
-                    import pdb; pdb.set_trace()
                     # the mother of all function calls
                     x_analysis, P_analysis, P_analysis_inverse, \
                         innovations_prime  = self.solver(
