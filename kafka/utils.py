@@ -29,7 +29,7 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as spl
-import netCDF4
+#import netCDF4
 import datetime as dt
 import os
 import gdal

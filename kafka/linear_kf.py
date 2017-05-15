@@ -196,7 +196,7 @@ class LinearKalman (object):
                                      shape=P_analysis_inverse.shape) + \
                 self.trajectory_uncertainty
             P_forecast_inverse = P_analysis_inverse.copy()
-            P_forecast_inverse.setdiag( 1./P_approx.diagonal() )
+            #P_forecast_inverse.setdiag( 1./P_approx.diagonal() )
             P_forecast = None
             
         else:
@@ -334,12 +334,20 @@ class LinearKalman (object):
                     break
 
                 if converged and n_iter > 1:
+                    # Convergence, getting out of loop
+                    # Store current state as x_forecast in case more obs today
+                    x_forecast = x_analysis*1
+                    P_forecast = P_analysis
+                    P_forecast_inverse = P_analysis_inverse
                     break
 
 		if n_iter >= 10:
                     # Break if we go over 10 iterations
                     LOG.info("Wow, too many iterations (%d)!"%n_iter)
                     LOG.info("Stopping iterations here")
+                    x_forecast = x_analysis*1
+                    P_forecast = P_analysis
+                    P_forecast_inverse = P_analysis_inverse
 		    break
 
         return x_analysis, P_analysis, P_analysis_inverse

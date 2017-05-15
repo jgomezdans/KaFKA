@@ -53,14 +53,25 @@ MCD43_observations = namedtuple('MCD43_observations',
 
 class BHRKalman (NonLinearKalman):
     """The non-linear EKF working on MODIS MCD43 C5 data"""
-    def __init__(self, emulator, observations, observation_times,
+    def __init__(self, x0, y0, nx, ny, emulator, observations, observation_times,
                  observation_metadata, output_array, output_unc,
                  bands_per_observation=2, diagnostics=True,n_params=7):
 
+        self.x0 = x0
+        self.y0 = y0
+        self.nx = nx
+        self.ny = ny
         NonLinearKalman.__init__(self, emulator, observations, observation_times,
                                 observation_metadata, output_array, output_unc,
                                 bands_per_observation=bands_per_observation,
                                 diagnostics=diagnostics, n_params=n_params)
+        
+    def _dump_output(self, step, timestep, x_analysis, P_analysis,
+                     P_analysis_inverse):
+        
+        for param in xrange(self.n_params):
+            param_x = x_analysis[param::7].reshape((self.nx, self.ny))
+            self.output[param].GetRasterBand(step + 1).WriteArray(param_x)
 
     def _get_observations_timestep(self, timestep, band=None):
         """This method is based on the MCD43 family of products.
@@ -84,7 +95,9 @@ class BHRKalman (NonLinearKalman):
                 '{0:s}":MOD_Grid_BRDF:BRDF_Albedo_Parameters_{1:s}'.format(fich,
                                                                            band)
         g = gdal.Open(fname)
-        data = g.ReadAsArray()[:, :512, :512]
+        
+        data = g.ReadAsArray()[:, (self.x0):(self.x0+self.nx), 
+                               (self.y0):(self.y0+self.ny)]
         mask = np.all(data != 32767, axis=0)
         data = np.where(mask, data * 0.001, np.nan)
 
@@ -95,12 +108,14 @@ class BHRKalman (NonLinearKalman):
         fname = 'HDF4_EOS:EOS_GRID:' + \
                 '"{0:s}":MOD_Grid_BRDF:BRDF_Albedo_Quality'.format(fich)
         g = gdal.Open(fname)
-        qa = g.ReadAsArray()[:512, :512]
+        qa = g.ReadAsArray()[(self.x0):(self.x0+self.nx), 
+                               (self.y0):(self.y0+self.ny)]
         LOG.info("\tReading Snow")
         fname = 'HDF4_EOS:EOS_GRID:' + \
                 '"{0:s}":MOD_Grid_BRDF:Snow_BRDF_Albedo'.format(fich)
         g = gdal.Open(fname)
-        snow = g.ReadAsArray()[:512, :512]
+        snow = g.ReadAsArray()[(self.x0):(self.x0+self.nx), 
+                               (self.y0):(self.y0+self.ny)]
         # qa used to define R_mat **and** mask. Don't know what to do with
         # snow information really... Ignore it?
         mask = mask * (qa != 255)  # This is OK pixels
@@ -138,7 +153,6 @@ class BHRKalman (NonLinearKalman):
     def _plotter_iteration_start(self, plot_obj, x, obs, mask):
         cmap = plt.cm.viridis
         cmap.set_bad = "0.8"
-        
         #plot_obj.axs[0].imshow(x[6*512*512:].reshape(obs.shape), interpolation='nearest',
         #                       cmap=cmap)
         #plot_obj.axs[0].set_title("Prior state")
@@ -161,14 +175,15 @@ class BHRKalman (NonLinearKalman):
         n_pixels = plot_obj.nx*plot_obj.ny
         plot_obj.axs[0][1].imshow(mask, interpolation='nearest', 
                                   cmap=plt.cm.gray)
+        plot_obj.axs[0][1].set_title('mask')
+
+        parameters = ['ssa band0', 'asym band0', 'rsoil band0', 
+                      'sssa band1', 'asym band1', 'rsoil band1', 'LAI'] 
         for i in xrange(self.n_params):
-            #plot_obj.axs[1][i].imshow(x[(i*n_pixels):((i+1)*n_pixels)].reshape
-            #                          ((plot_obj.ny, plot_obj.nx)),
-            #                   interpolation='nearest', cmap=cmap)
-            print type(x)  
             plot_obj.axs[1][i].imshow(x[i::self.n_params].reshape
                                       ((plot_obj.ny, plot_obj.nx)),
                                interpolation='nearest', cmap=cmap)
+            plot_obj.axs[1][i].set_title(parameters[i])
         #plot_obj.axs[3].set_title("Posterior mean")
         #unc = P.diagonal().reshape((plot_obj.ny, plot_obj.nx))
         #plot_obj.axs[4].imshow(np.sqrt(unc),
@@ -178,6 +193,8 @@ class BHRKalman (NonLinearKalman):
         plot_obj.fig.savefig(plot_obj.fname + ".png", dpi=72,
                              bbox_inches="tight")
         plt.close(plot_obj.fig)
+        
+        #import pdb; pdb.set_trace()
 
 
 if __name__ == "__main__":
@@ -211,13 +228,38 @@ if __name__ == "__main__":
     emulator = cPickle.load(open(
         "../SAIL_emulator_both_500trainingsamples.pkl", 'r'))
     LOG.info("Emulator loaded")
-    kalman = BHRKalman(emulator, mcd43_observations, doys,
-                             mcd43_observations, [], [], n_params=7)
 
     # test methods
     #bhr, R_mat, mask, metadata = kalman._get_observations_timestep(1,
     #                                                               band=0)
-    n_pixels = 512*512
+    tilewidth = 300#2400
+    n_pixels = tilewidth*tilewidth#512*512
+    
+    outputs = []
+    g = gdal.Open(fnames_a1[0])
+    proj = g.GetProjection()
+    geoT = g.GetGeoTransform()
+    drv = gdal.GetDriverByName("GTiff")
+    for params in ["ssa_vis", "asym_vis", "soil_vis",
+                   "ssa_nir", "asym_nir", "soil_nir",
+                   "lai_eff"]:
+        dst_ds = drv.Create("%s.tif"%params, tilewidth, tilewidth, 366,
+                            gdal.GDT_Float32,
+                          ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 'PREDICTOR=1',
+                           'TILED=YES'])
+        dst_ds.SetProjection(proj)
+        # HACK! geoT needs correction from when doing anything other than the
+        # HACK top left corner
+        dst_ds.SetGeoTransform(geoT)
+        outputs.append(dst_ds)
+
+    kalman = BHRKalman(0, 0, tilewidth, tilewidth, emulator,mcd43_observations, doys,
+                             mcd43_observations, outputs, [], n_params=7)
+
+
+                            
+        
+
     # Defining the prior
     sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 5])
     x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, 1.5])
@@ -237,13 +279,14 @@ if __name__ == "__main__":
     Q = np.ones(n_pixels*7)*0.1
     Q[-n_pixels:] = 1. # LAI
     
-    kalman.set_trajectory_model ( 512, 512)
-    kalman.set_trajectory_uncertainty(Q, 512, 512)
+    kalman.set_trajectory_model(tilewidth, tilewidth)#(( 512, 512)
+    kalman.set_trajectory_uncertainty(Q,tilewidth, tilewidth) # 512, 512)
+    
 
     # Need to set the trajectory model and uncertainty inflation
     # Prior needs to be reorganised to be block diagonal
     kalman.run(x0, None, P_forecast_inv,
-                   diag_str="diagnostics",
+                   diag_str="test",
                    approx_diagonal=True, refine_diag=False,
                    iter_obs_op=True, is_robust=False)
 
