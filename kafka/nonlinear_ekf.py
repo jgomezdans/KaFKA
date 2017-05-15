@@ -72,7 +72,6 @@ class NonLinearKalman (LinearKalman):
         is achieved by using the `state_mapper` to select which bits
         of the state vector (and model Jacobian) are used."""
         LOG.info("Creating the ObsOp for band %d" % band)
-        import pdb;pdb.set_trace()
         n_times = x_forecast.shape[0]/self.n_params
         good_obs = metadata.mask.sum()
         
