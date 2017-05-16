@@ -309,11 +309,11 @@ class LinearKalman (object):
                             x_forecast, P_forecast, P_forecast_inverse, 
                             R_mat, the_metadata)
 
+                    x_forecast = x_analysis*1
+                    P_forecast = P_analysis
+                    P_forecast_inverse = P_analysis_inverse                    
 
-                    if self.diagnostics:
-                        self._plotter_iteration_end(plot_object, x_analysis,
-                                                        P_analysis,
-                                                        innovations_prime, mask)
+
 
 
 
@@ -326,7 +326,7 @@ class LinearKalman (object):
                     if convergence_norm <= 5e-4:
                         converged = True
                         LOG.info("Converged (%g) !!!"%convergence_norm)
-                    x_prev = x_analysis
+                    x_prev = x_analysis*1.
                     LOG.info("Iteration %d convergence: %g" %( n_iter, 
                                                             convergence_norm))
         #                if is_robust and converged:
@@ -338,24 +338,24 @@ class LinearKalman (object):
                 else:
                     break
 
-                if converged and n_iter > 1:
+                if converged and n_iter > 2:
                     # Convergence, getting out of loop
                     # Store current state as x_forecast in case more obs today
                     # the analysis becomes the forecast for the next
                     # iteration
-                    x_forecast = x_analysis*1
-                    P_forecast = P_analysis
-                    P_forecast_inverse = P_analysis_inverse                    
+                    
                     break
 
                 if n_iter >= 20:
                     # Break if we go over 10 iterations
                     LOG.info("Wow, too many iterations (%d)!"%n_iter)
                     LOG.info("Stopping iterations here")
-                    x_forecast = x_analysis*1
-                    P_forecast = P_analysis
-                    P_forecast_inverse = P_analysis_inverse
                     break
+        if self.diagnostics:
+            LOG.info("Plotting")
+            self._plotter_iteration_end(plot_object, x_analysis,
+                                        P_analysis, innovations_prime, mask)
+
 
         return x_analysis, P_analysis, P_analysis_inverse
 
