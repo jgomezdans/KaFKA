@@ -83,10 +83,10 @@ class NonLinearKalman (LinearKalman):
 
         # So the model has spectral components. 
         if band == 0:
-            # ssa, asym, LAI, rsoil
+            # ssa, asym, TLAI, rsoil
             state_mapper = np.array([0,1,6,2])
         elif band == 1:
-            # ssa, asym, LAI, rsoil
+            # ssa, asym, TLAI, rsoil
             state_mapper = np.array([3,4,6,5])
         
         x0 = np.zeros((n_times, 4))
@@ -103,10 +103,12 @@ class NonLinearKalman (LinearKalman):
                 H0[i] = H0_[n]
                 n += 1
         LOG.info("\tDone!")
+        
         return (H0, H_matrix.tocsr())
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
                 P_forecast_inv, R_mat, the_metadata):
+        
         x_analysis, P_analysis, P_analysis_inv, innovations_prime = \
             variational_kalman (
             observations, H_matrix, self.n_params, x_forecast,
