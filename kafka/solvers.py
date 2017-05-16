@@ -22,6 +22,7 @@
 from collections import namedtuple
 import numpy as np
 import scipy.sparse as sp
+import matplotlib.pyplot as plt
 
 from utils import  matrix_squeeze, spsolve2, reconstruct_array
 
@@ -122,6 +123,7 @@ def variational_kalman( observations, H_matrix, n_params,
     # So retval is the solution vector and A is the Hessian 
     # (->inv(A) is posterior cov)
     innovations = y - H_matrix.dot(x_analysis)
+    
     LOG.info("Inflating analysis state")
     #x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
     #                                    mask.ravel(), n_params=n_params)
