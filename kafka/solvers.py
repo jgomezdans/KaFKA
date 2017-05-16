@@ -109,7 +109,7 @@ def variational_kalman( observations, H_matrix, n_params,
     y = y.ravel()
     #y = observations.ravel()#[mask.ravel()]
     #y[~mask.ravel()] = 0.
-    y = y - H0 + H_matrix.dot(x_forecast)
+    y = y + H_matrix.dot(x_forecast) - H0
     #Aa = matrix_squeeze (P_forecast_inv, mask=maska.ravel())
     A = H_matrix.T.dot(R_mat).dot(H_matrix) + P_forecast_inv
     b = H_matrix.T.dot(R_mat).dot(y) + P_forecast_inv.dot (x_forecast)
