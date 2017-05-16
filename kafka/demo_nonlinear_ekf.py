@@ -72,6 +72,32 @@ class BHRKalman (NonLinearKalman):
         for param in xrange(self.n_params):
             param_x = x_analysis[param::7].reshape((self.nx, self.ny))
             self.output[param].GetRasterBand(step + 1).WriteArray(param_x)
+        LOG.info("Written (%d/%d)" % (step, timestep))
+
+    def advance(self, x_analysis, P_analysis, P_analysis_inverse):
+        """Advance the state"""
+        LOG.info("Pinty-fying the prior")
+        
+        # Defining the prior
+        sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.5]) # broadly TLAI 0->7 for 1sigma
+        x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, np.exp(-0.5*1.5)])
+        x0 = np.array([x0 for i in xrange(n_pixels)]).flatten()
+        # The individual covariance matrix
+        little_p = np.diag ( sigma**2).astype(np.float32)
+        little_p[5,2] = 0.8862*0.0959*0.2
+        little_p[2,5] = 0.8862*0.0959*0.2
+
+        inv_p = np.linalg.inv(little_p)
+        xlist = [inv_p for m in xrange(n_pixels)]
+
+        
+        P_forecast_inverse=block_diag(xlist, dtype=np.float32)
+        P_forecast = None
+        x_forecast = x0*1.#x_analysis
+        LOG.info("Pinty-fied!")
+        return x_forecast, P_forecast, P_forecast_inverse
+
+
 
     def _get_observations_timestep(self, timestep, band=None):
         """This method is based on the MCD43 family of products.
@@ -116,16 +142,18 @@ class BHRKalman (NonLinearKalman):
         g = gdal.Open(fname)
         snow = g.ReadAsArray()[(self.x0):(self.x0+self.nx), 
                                (self.y0):(self.y0+self.ny)]
+        LOG.info("Snowed pixels; %d" %((snow==1).sum()))
         # qa used to define R_mat **and** mask. Don't know what to do with
         # snow information really... Ignore it?
-        mask = mask * (qa != 255)  # This is OK pixels
+        mask = mask * (qa != 255)*(snow == 0)  # This is OK pixels
         R_mat = np.zeros_like(bhr)
 
         R_mat[qa == 0] = np.maximum(2.5e-3, bhr[qa == 0] * 0.05)
         R_mat[qa == 1] = np.maximum(2.5e-3, bhr[qa == 1] * 0.07)
+        R_mat[np.logical_not(mask)] = 1.
         N = mask.ravel().shape[0]
         R_mat_sp = sp.lil_matrix((N, N))
-        R_mat_sp.setdiag(R_mat.ravel())
+        R_mat_sp.setdiag(1./(R_mat.ravel())**2)
         R_mat_sp = R_mat_sp.tocsr()
         
         metadata = Metadata(mask, R_mat_sp, band)
@@ -179,10 +207,15 @@ class BHRKalman (NonLinearKalman):
 
         parameters = ['ssa band0', 'asym band0', 'rsoil band0', 
                       'sssa band1', 'asym band1', 'rsoil band1', 'LAI'] 
+        pmin = np.array([0., 1.5, 0., 0., 1.5, 0., 0.])
+        pmax = np.array([0.4, 2.5, 0.3, 0.8, 2.5, 0.3, 0.8])
+                        
         for i in xrange(self.n_params):
             plot_obj.axs[1][i].imshow(x[i::self.n_params].reshape
                                       ((plot_obj.ny, plot_obj.nx)),
-                               interpolation='nearest', cmap=cmap)
+                               interpolation='nearest', 
+                               vmin=pmin[i], vmax=pmax[i],
+                               cmap=cmap)
             plot_obj.axs[1][i].set_title(parameters[i])
         #plot_obj.axs[3].set_title("Posterior mean")
         #unc = P.diagonal().reshape((plot_obj.ny, plot_obj.nx))
@@ -203,9 +236,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, 
                         format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 
-    files1 = glob.glob("/data/selene/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
+    #files1 = glob.glob("/data/selene/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
+    files1 = glob.glob("/storage/ucfajlg/Aurade_MODIS/MCD43/MCD43A1.A2010*.hdf")
     files1.sort()
-    files2 = glob.glob("/data/selene/ucfajlg/Aurade_MODIS/MCD43/MCD43A2.A2010*.hdf")
+    #files2 = glob.glob("/data/selene/ucfajlg/Aurade_MODIS/MCD43/MCD43A2.A2010*.hdf")
+    files2 = glob.glob("/storage/ucfajlg/Aurade_MODIS/MCD43/MCD43A2.A2010*.hdf")
     files2.sort()
 
     fnames_a1 = []
@@ -215,6 +250,8 @@ if __name__ == "__main__":
         fname = fich.split("/")[-1]
         timestring = fname.split(".")[1]
         doy = int(fname.split(".")[1][-3:])
+#        if doy < 90:
+#            continue
         fnames_a1.append(fich)
         for f2 in files2:
             if f2.find(timestring) > 0:
@@ -239,11 +276,13 @@ if __name__ == "__main__":
     g = gdal.Open(fnames_a1[0])
     proj = g.GetProjection()
     geoT = g.GetGeoTransform()
+    out_dir = "/storage/ucfajlg/Aurade_MODIS/"
     drv = gdal.GetDriverByName("GTiff")
     for params in ["ssa_vis", "asym_vis", "soil_vis",
                    "ssa_nir", "asym_nir", "soil_nir",
-                   "lai_eff"]:
-        dst_ds = drv.Create("%s.tif"%params, tilewidth, tilewidth, 366,
+                   "Tlai_eff"]:
+        dst_ds = drv.Create(os.path.join(out_dir, "%s.tif"%params), 
+                            tilewidth, tilewidth, 366,
                             gdal.GDT_Float32,
                           ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 'PREDICTOR=1',
                            'TILED=YES'])
@@ -261,8 +300,8 @@ if __name__ == "__main__":
         
 
     # Defining the prior
-    sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 5])
-    x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, 1.5])
+    sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.5]) # broadly TLAI 0->7 for 1sigma
+    x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, np.exp(-0.5*1.5)])
     x0 = np.array([x0 for i in xrange(n_pixels)]).flatten()
     # The individual covariance matrix
     little_p = np.diag ( sigma**2).astype(np.float32)
@@ -276,8 +315,8 @@ if __name__ == "__main__":
     P_forecast_inv=block_diag(xlist, dtype=np.float32)
     
     
-    Q = np.ones(n_pixels*7)*0.1
-    Q[-n_pixels:] = 1. # LAI
+    Q = np.ones(n_pixels*7)*0.0001
+    Q[6::7] = 0.0001 # TLAI
     
     kalman.set_trajectory_model(tilewidth, tilewidth)#(( 512, 512)
     kalman.set_trajectory_uncertainty(Q,tilewidth, tilewidth) # 512, 512)
