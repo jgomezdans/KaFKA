@@ -68,13 +68,46 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         
     def _dump_output(self, step, timestep, x_analysis, P_analysis, 
                      P_analysis_inverse):
-        x = x_analysis[:(2400*2400)].reshape((2400,2400))
+        x_iso =  x_analysis[:(2400*2400)].reshape((2400,2400))
+        x_vol =  x_analysis[(2400*2400):2*(2400*2400)].reshape((2400,2400))
+        x_geo =  x_analysis[2*(2400*2400):3*(2400*2400)].reshape((2400,2400))
+
+        x_iso_unc =  P_analysis.diagonal()[:(2400*2400)].reshape((2400,2400))
+        x_vol_unc =  P_analysis.diagonal()[(2400*2400):2*(2400*2400)].reshape((2400,2400))
+        x_geo_unc =  P_analysis.diagonal()[2*(2400*2400):3*(2400*2400)].reshape((2400,2400))
+
+        BHR = x_iso+x_vol*0.189184 + x_geo*1.377622
+        BHR_unc = x_iso_unc + x_vol_unc*0.189184 + x_geo_unc*1.377622
+
         LOG.info("saving. Timestep %d, step %d" % (timestep, step))
-        self.output.GetRasterBand(timestep+1).WriteArray(x)
-        self.output.GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
-        LOG.info("**NOT** saving the whole state, only Isotropic. CHANGEME")
+        self.output['bhr'].GetRasterBand(timestep+1).WriteArray(BHR)
+        self.output['bhr'].GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
+        
+        self.output['iso'].GetRasterBand(timestep+1).WriteArray(x_iso)
+        self.output['iso'].GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
+        
+        self.output['vol'].GetRasterBand(timestep+1).WriteArray(x_vol)
+        self.output['vol'].GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
+        
+        self.output['geo'].GetRasterBand(timestep+1).WriteArray(x_geo)
+        self.output['geo'].GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
+
+        self.output['bhr_unc'].GetRasterBand(timestep+1).WriteArray(BHR_unc)
+        self.output['bhr_unc'].GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
+        
+        self.output['iso_unc'].GetRasterBand(timestep+1).WriteArray(x_iso_unc)
+        self.output['iso_unc'].GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
+        
+        self.output['vol_unc'].GetRasterBand(timestep+1).WriteArray(x_vol_unc)
+        self.output['vol_unc'].GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
+        
+        self.output['geo_unc'].GetRasterBand(timestep+1).WriteArray(x_geo_unc)
+        self.output['geo_unc'].GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
+
         if timestep % 10 == 0:
-            self.output.FlushCache()
+            for key, val in self.output.iteritems():
+                val.FlushCache()
+        #self.output['bhr'].FlushCache()
         #plt.imshow(x, interpolation='nearest', vmin=-0.1, vmax=0.5)
         #plt.title("%d-%d" % (step, timestep))
         #plt.show()
@@ -119,10 +152,10 @@ class MODISKernelLinearKalman (KernelLinearKalman):
 
 if __name__ == "__main__":
     the_dir="/data/selene/ucfajlg/Aurade_MODIS/"
+    band = 1
     g = gdal.Open(the_dir + "brdf_2010_b01.vrt")
     days = np.array([int(g.GetRasterBand(i+1).GetMetadata()['DoY'])
                             for i in xrange(g.RasterCount)])
-
     modis_obs = MODIS_observations( days,
                 gdal.Open(os.path.join(the_dir, "statekm_2010.vrt")),
                 gdal.Open(os.path.join(the_dir, "SensorZenith_2010.vrt")),
@@ -138,14 +171,27 @@ if __name__ == "__main__":
                 gdal.Open(os.path.join(the_dir, "brdf_2010_b07.vrt")))
 
     # We can now create the output
-    # stuff stuff stuff
-    drv = gdal.GetDriverByName("GTiff")
-    dst_ds = drv.Create ("tmp/nadir.tif", 2400, 2400, 366, gdal.GDT_Float32,
-                          ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 'PREDICTOR=1',
-                           'TILED=YES'])
-    dst_ds.SetProjection(modis_obs[1].GetProjection())
-    dst_ds.SetGeoTransform(modis_obs[1].GetGeoTransform())
-    
+    # stuff stuff stuff    
+    def create_output_file(template, filename):
+        drv = gdal.GetDriverByName("GTiff")
+        dst_ds = drv.Create (filename, 2400, 2400, 366, gdal.GDT_Float32,
+                              ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 'PREDICTOR=1',
+                               'TILED=YES'])
+        dst_ds.SetProjection(template.GetProjection())
+        dst_ds.SetGeoTransform(template.GetGeoTransform())
+        return dst_ds
+
+    fname_add = '_testing'# ''
+    dst_ds={}
+    dst_ds['bhr'] = create_output_file(modis_obs[1], "tmp/bhr_band{}{}.tif".format(band, fname_add))
+    dst_ds['iso'] = create_output_file(modis_obs[1], "tmp/iso_band{}{}.tif".format(band, fname_add))
+    dst_ds['geo'] = create_output_file(modis_obs[1], "tmp/geo_band{}{}.tif".format(band, fname_add))
+    dst_ds['vol'] = create_output_file(modis_obs[1], "tmp/vol_band{}{}.tif".format(band, fname_add))
+    dst_ds['bhr_unc'] = create_output_file(modis_obs[1], "tmp/bhr_unc_band{}{}.tif".format(band, fname_add))
+    dst_ds['iso_unc'] = create_output_file(modis_obs[1], "tmp/iso_unc_band{}{}.tif".format(band, fname_add))
+    dst_ds['geo_unc'] = create_output_file(modis_obs[1], "tmp/geo_unc_band{}{}.tif".format(band, fname_add))
+    dst_ds['vol_unc'] = create_output_file(modis_obs[1], "tmp/vol_unc_band{}{}.tif".format(band, fname_add))
+ 
 
     #output = OutputFile("/tmp/testme.nc", times=None, x=np.arange(2400),
     #                    y=np.arange(2400))
@@ -158,5 +204,7 @@ if __name__ == "__main__":
     # The following runs the filter over time, selecting band 2 (NIR)
     # In order to calcualte BB albedos, you need to run the filter over
     # all bands, but you can do this in parallel
-    kf.run(x_forecast, P_forecast, None, band=2, refine_diag=False)
-    dst_ds = None
+    kf.run(x_forecast, P_forecast, None, band=band, refine_diag=False)
+    for key, val in dst_ds.iteritems():
+        val = None
+    LOG.info("FINISHED")
