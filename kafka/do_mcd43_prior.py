@@ -57,7 +57,13 @@ def read_mcd43(band, fname_a1, fname_a2):
         '"{0:s}":MOD_Grid_BRDF:BRDF_Albedo_Quality'.format(fname_a2)
     g = gdal.Open(fname)
     qa = g.ReadAsArray()
-    mask = qa == 255
+        #fname = 'HDF4_EOS:EOS_GRID:' + \
+        #'"{0:s}":MOD_Grid_BRDF:BRDF_Albedo_Ancillary'.format(fname_a2)
+    #g = gdal.Open(fname)
+    #land = g.ReadAsArray()
+    #land = np.bitwise_and(land, 112)
+
+    mask = qa == 255 # crap pixel
     out = data*0.
     for i in xrange(3):
         out[i,:] = np.where(mask, np.nan, data[i,:])
