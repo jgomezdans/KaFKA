@@ -210,15 +210,17 @@ class LinearKalman (object):
     def run(self, x_forecast, P_forecast, P_forecast_inverse,
                    diag_str="diagnostics",
                    band=None, approx_diagonal=True, refine_diag=True,
-                   iter_obs_op=False, is_robust=False):
+                   iter_obs_op=False, is_robust=False, dates=None):
+         
         is_first = True
+        
         for ii,timestep in enumerate(np.arange(self.observation_times.min(),
                                   self.observation_times.max() + 1)):
             # First locate all available observations for time step of interest.
             # Note that there could be more than one...
             locate_times = [i for i, x in enumerate(self.observation_times)
                         if x == timestep]
-            
+            self.current_timestep = timestep
             LOG.info("timestep %d" % timestep)
             
             if not is_first:
@@ -338,7 +340,7 @@ class LinearKalman (object):
                 else:
                     break
 
-                if converged and n_iter > 2:
+                if converged and n_iter > 1:
                     # Convergence, getting out of loop
                     # Store current state as x_forecast in case more obs today
                     # the analysis becomes the forecast for the next
@@ -346,7 +348,7 @@ class LinearKalman (object):
                     
                     break
 
-                if n_iter >= 20:
+                if n_iter >= 8:
                     # Break if we go over 10 iterations
                     LOG.info("Wow, too many iterations (%d)!"%n_iter)
                     LOG.info("Stopping iterations here")
