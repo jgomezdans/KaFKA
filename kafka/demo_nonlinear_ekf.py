@@ -93,7 +93,7 @@ class BHRKalman (NonLinearKalman):
         
         P_forecast_inverse=block_diag(xlist, dtype=np.float32)
         P_forecast = None
-        x_forecast = x0*1.#x_analysis
+        x_forecast = x_analysis
         LOG.info("Pinty-fied!")
         return x_forecast, P_forecast, P_forecast_inverse
 
@@ -150,7 +150,7 @@ class BHRKalman (NonLinearKalman):
 
         R_mat[qa == 0] = np.maximum(2.5e-3, bhr[qa == 0] * 0.05)
         R_mat[qa == 1] = np.maximum(2.5e-3, bhr[qa == 1] * 0.07)
-        R_mat[np.logical_not(mask)] = 1.
+        R_mat[np.logical_not(mask)] = 0.
         N = mask.ravel().shape[0]
         R_mat_sp = sp.lil_matrix((N, N))
         R_mat_sp.setdiag(1./(R_mat.ravel())**2)
@@ -278,9 +278,9 @@ if __name__ == "__main__":
     geoT = g.GetGeoTransform()
     out_dir = "/storage/ucfajlg/Aurade_MODIS/"
     drv = gdal.GetDriverByName("GTiff")
-    for params in ["ssa_vis", "asym_vis", "soil_vis",
-                   "ssa_nir", "asym_nir", "soil_nir",
-                   "Tlai_eff"]:
+    for params in ["hp_ssa_vis", "hp_asym_vis", "hp_soil_vis",
+                   "hp_ssa_nir", "hp_asym_nir", "hp_soil_nir",
+                   "hp_Tlai_eff"]:
         dst_ds = drv.Create(os.path.join(out_dir, "%s.tif"%params), 
                             tilewidth, tilewidth, 366,
                             gdal.GDT_Float32,
@@ -325,7 +325,7 @@ if __name__ == "__main__":
     # Need to set the trajectory model and uncertainty inflation
     # Prior needs to be reorganised to be block diagonal
     kalman.run(x0, None, P_forecast_inv,
-                   diag_str="test",
+                   diag_str="half_pinty",
                    approx_diagonal=True, refine_diag=False,
                    iter_obs_op=True, is_robust=False)
 
