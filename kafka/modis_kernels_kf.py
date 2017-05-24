@@ -38,7 +38,8 @@ import numpy as np
 import gdal
 
 from linear_kernels_kf import KernelLinearKalman
-from utils import OutputFile # The netCDF writer
+from solvers import variational_kalman
+#from utils import OutputFile # The netCDF writer
 
 # Set up logging
 import logging
@@ -105,7 +106,7 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         vaa = self.observations.vaa.GetRasterBand(timestep + 1).ReadAsArray()
         raa = vaa - saa
         rho_pntr = self.observations[5 + self.the_band]
-        rho = rho_pntr.GetRasterBand(timestep+1).ReadAsArray()/10000.
+        rho = rho_pntr.GetRasterBand(timestep + 1).ReadAsArray()/10000.
         # Taken from http://modis-sr.ltdri.org/pages/validation.html
         modis_uncertainty=np.array([0.005, 0.014, 0.008, 0.005, 0.012,
                                     0.006, 0.003])[self.the_band]
@@ -117,30 +118,77 @@ class MODISKernelLinearKalman (KernelLinearKalman):
 
 
 
+def get_mcd43_prior(mcd43_fstring, band):
+    g = gdal.Open(mcd43_fstring % band)
+    # Deal with means...
+    iso = g.GetRasterBand(1).ReadAsArray().flatten()
+    vol = g.GetRasterBand(2).ReadAsArray().flatten()
+    geo = g.GetRasterBand(3).ReadAsArray().flatten()
+    
+    iso = np.where (np.isnan(iso), 0.5, iso)
+    vol = np.where (np.isnan(vol), 0.5, vol)
+    geo = np.where (np.isnan(geo), 0.5, geo)
+    
+    n = 2400*2400
+    
+    #x_forecast = np.empty(3*n)
+    #x_forecast[0::3] = iso
+    #x_forecast[1::3] = vol
+    #x_forecast[2::3] = geo
+    x_forecast = np.r_[iso, vol, geo]
+
+    
+    # Deal with sigmas...
+    iso = g.GetRasterBand(4).ReadAsArray().flatten()
+    vol = g.GetRasterBand(5).ReadAsArray().flatten()
+    geo = g.GetRasterBand(6).ReadAsArray().flatten()
+    
+    iso = np.where (np.isnan(iso), 0.5, iso)
+    vol = np.where (np.isnan(vol), 0.5, vol)
+    geo = np.where (np.isnan(geo), 0.5, geo)
+    
+    
+    #sigma = np.empty(3*n)
+    #sigma[0::3] = 1./(iso*iso)
+    #sigma[1::3] = 1./(vol*vol)
+    #sigma[2::3] = 1./(geo*geo)
+    sigma= np.r_[iso, vol, geo]
+    
+
+    
+    P_forecast = sp.eye(3*n, 3*n, format="csc", dtype=np.float32)
+    P_forecast.setdiag(sigma**2)
+    
+    return x_forecast, P_forecast
+
+
+
 if __name__ == "__main__":
-    the_dir="/data/selene/ucfajlg/Aurade_MODIS/"
-    g = gdal.Open(the_dir + "brdf_2010_b01.vrt")
+    the_dir="/storage/ucfajlg/Ujia/"
+    g = gdal.Open(the_dir + "brdf_2016_b01.vrt")
     days = np.array([int(g.GetRasterBand(i+1).GetMetadata()['DoY'])
                             for i in xrange(g.RasterCount)])
 
+    time_offset = np.nonzero(days == 46)[0][0] # First time DoY 46 is mentioned
+    days = days[np.logical_and(days >= 45, days <= 250)]
     modis_obs = MODIS_observations( days,
-                gdal.Open(os.path.join(the_dir, "statekm_2010.vrt")),
-                gdal.Open(os.path.join(the_dir, "SensorZenith_2010.vrt")),
-                gdal.Open(os.path.join(the_dir, "SolarZenith_2010.vrt")),
-                gdal.Open(os.path.join(the_dir, "SolarAzimuth_2010.vrt")),
-                gdal.Open(os.path.join(the_dir, "SensorAzimuth_2010.vrt")),
-                gdal.Open(os.path.join(the_dir, "brdf_2010_b01.vrt")),
-                gdal.Open(os.path.join(the_dir, "brdf_2010_b02.vrt")),
-                gdal.Open(os.path.join(the_dir, "brdf_2010_b03.vrt")),
-                gdal.Open(os.path.join(the_dir, "brdf_2010_b04.vrt")),
-                gdal.Open(os.path.join(the_dir, "brdf_2010_b05.vrt")),
-                gdal.Open(os.path.join(the_dir, "brdf_2010_b06.vrt")),
-                gdal.Open(os.path.join(the_dir, "brdf_2010_b07.vrt")))
+                gdal.Open(os.path.join(the_dir, "statekm_2016.vrt")),
+                gdal.Open(os.path.join(the_dir, "SensorZenith_2016.vrt")),
+                gdal.Open(os.path.join(the_dir, "SolarZenith_2016.vrt")),
+                gdal.Open(os.path.join(the_dir, "SolarAzimuth_2016.vrt")),
+                gdal.Open(os.path.join(the_dir, "SensorAzimuth_2016.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2016_b01.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2016_b02.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2016_b03.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2016_b04.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2016_b05.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2016_b06.vrt")),
+                gdal.Open(os.path.join(the_dir, "brdf_2016_b07.vrt")))
 
     # We can now create the output
     # stuff stuff stuff
     drv = gdal.GetDriverByName("GTiff")
-    dst_ds = drv.Create ("tmp/nadir.tif", 2400, 2400, 366, gdal.GDT_Float32,
+    dst_ds = drv.Create ("/tmp/test_nadir.tif", 2400, 2400, 366, gdal.GDT_Float32,
                           ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 'PREDICTOR=1',
                            'TILED=YES'])
     dst_ds.SetProjection(modis_obs[1].GetProjection())
@@ -150,13 +198,14 @@ if __name__ == "__main__":
     #output = OutputFile("/tmp/testme.nc", times=None, x=np.arange(2400),
     #                    y=np.arange(2400))
     kf = MODISKernelLinearKalman(modis_obs, days, dst_ds, [] )
+    kf.time_offset = time_offset
     n = 2400
-    x_forecast = np.ones(3*2400*2400)*0.5
-    P_forecast = sp.eye(3*n*n, 3*n*n, format="csc", dtype=np.float32)
+    mcd43_fstring = "/data/selene/ucfajlg/Ujia/MCD43/MCD43_average_2016_001_030_b%d.tif"
+    x_forecast, P_forecast = get_mcd43_prior(mcd43_fstring, 2)
     kf.set_trajectory_model(2400, 2400)
-    kf.set_trajectory_uncertainty(0.005, 2400, 2400)
+    kf.set_trajectory_uncertainty(0.01, 2400, 2400)
     # The following runs the filter over time, selecting band 2 (NIR)
     # In order to calcualte BB albedos, you need to run the filter over
     # all bands, but you can do this in parallel
-    kf.run(x_forecast, P_forecast, None, band=2, refine_diag=False)
+    kf.run(x_forecast, None, P_forecast, band=2, refine_diag=False)
     dst_ds = None
