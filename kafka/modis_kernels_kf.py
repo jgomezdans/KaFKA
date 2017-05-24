@@ -207,5 +207,5 @@ if __name__ == "__main__":
     # The following runs the filter over time, selecting band 2 (NIR)
     # In order to calcualte BB albedos, you need to run the filter over
     # all bands, but you can do this in parallel
-    kf.run(x_forecast, None, P_forecast, band=2, refine_diag=False)
+    kf.run(x_forecast, P_forecast, None, band=2, refine_diag=False)
     dst_ds = None
