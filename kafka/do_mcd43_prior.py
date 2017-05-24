@@ -31,6 +31,7 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 
 
 import sys
+import argparse
 import os
 import glob
 
@@ -69,17 +70,17 @@ def read_mcd43(band, fname_a1, fname_a2):
         out[i,:] = np.where(mask, np.nan, data[i,:])
     return out, proj, geoT
 
-def find_granules(the_dir, year, doy_start, doy_end):
+def find_granules(the_dir, tile, year, doy_start, doy_end):
     """
     Finds granules in a given directory, for all MCD43 datasets 
     between two dates. Returns two lists, one with the A1 and another
     with the A2 products.
     """
     fnames_a1 = glob.glob(os.path.join( the_dir, 
-        "MCD43A1.A%d*hdf" % year))
+        "MCD43A1.A%d*.%s.*hdf" % (year, tile)))
     fnames_a1.sort()
     fnames_a2 = glob.glob(os.path.join( the_dir, 
-        "MCD43A2.A%d*hdf" % year))
+        "MCD43A2.A%d*.%s.*hdf" % (year, tile)))
     fnames_a2.sort()
     a1_files = []
     a2_files = []
@@ -93,14 +94,39 @@ def find_granules(the_dir, year, doy_start, doy_end):
                     a2_files.append(fich2)
     return a1_files, a2_files
     
+def do_command_line():
+    parser = argparse.ArgumentParser(description=__doc__)
+    required = parser.add_argument_group('required arguments')
+    parser.add_argument("data_folder", type=str,
+                        help="Where the MCD43 files are")
+    parser.add_argument("tile", type=str,
+                        help="The MODIS tile")
+    required.add_argument("-y", "--year", dest="year", action="store",
+                        type=int, help="Year")
+    required.add_argument("-s", "--start", dest="doy_start", action="store",
+                        type=int, help="Starting DoY")
+    required.add_argument("-e", "--end", dest="doy_end", action="store",
+                        type=int, help="Ending DoY")
+    
+    args = parser.parse_args()
+    return (args.data_folder, args.tile, args.year, args.doy_start,
+            args.doy_end)
+
+
 if __name__ == "__main__":
 
-    year = 2009
-    doy_start = 300
-    doy_end = 367
+    data_dir, tile, year, doy_start, doy_end = do_command_line()
+    if not 1 <= doy_start <= 366:
+        raise ValueError, "Starting date out of range: %d" % doy_start
+    if not 1 <= doy_end <= 366:
+        raise ValueError, "Ending date out of range: %d" % doy_start
+    
+    if doy_end <= doy_start:
+        raise ValueError, "Wrong starting dates"
+    
     for band in xrange(1,8):
         print "Doing band %d" % band
-        a1_files, a2_files = find_granules("/storage/ucfajlg/Aurade_MODIS/MCD43",
+        a1_files, a2_files = find_granules(data_dir, tile,
             year, doy_start, doy_end)
             
         par1 = []
@@ -120,10 +146,9 @@ if __name__ == "__main__":
         S3 = np.nanstd( par3, axis=0 ).astype(np.float32)
         Nsamples = np.sum(~np.isnan(par1), axis=0).astype(np.float32)
         drv = gdal.GetDriverByName("GTiff")
-        dst_ds = drv.Create(
-            "/storage/ucfajlg/Aurade_MODIS/MCD43/" + 
+        dst_ds = drv.Create (os.path.join(data_dir, 
             "MCD43_average_%04d_%03d_%03d_b%d.tif" %(
-            year, doy_start, doy_end, band),
+            year, doy_start, doy_end, band)),
             2400, 2400, 7, gdal.GDT_Float32, ['COMPRESS=DEFLATE', 
             'BIGTIFF=YES', 'PREDICTOR=1','TILED=YES'])
         print "Saving to MCD43_average_%04d_%03d_%03d_b%d.tif" %(
