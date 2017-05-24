@@ -95,8 +95,13 @@ def kalman_divide_conquer( observations, H_matrix, n_params,
 def variational_kalman( observations, H_matrix, n_params,
             x_forecast, P_forecast, P_forecast_inv, the_metadata, approx_diagonal=True):
     """We can just use """
-    
-    H0, H_matrix = H_matrix
+    if len(H_matrix) == 2:
+        non_linear = True
+        H0, H_matrix = H_matrix
+    else:
+        H0 = 0.
+        non_linear = False
+        
     LOG.info("Squeezing prior covariance...")
     mask = the_metadata.mask
     maska = np.concatenate([mask.ravel() for i in xrange(n_params)]) 
@@ -110,7 +115,10 @@ def variational_kalman( observations, H_matrix, n_params,
     y = y.ravel()
     #y = observations.ravel()#[mask.ravel()]
     #y[~mask.ravel()] = 0.
-    y = y + H_matrix.dot(x_forecast) - H0
+    if non_linear:
+        y = y + H_matrix.dot(x_forecast) - H0
+    
+        
     #Aa = matrix_squeeze (P_forecast_inv, mask=maska.ravel())
     A = H_matrix.T.dot(R_mat).dot(H_matrix) + P_forecast_inv
     b = H_matrix.T.dot(R_mat).dot(y) + P_forecast_inv.dot (x_forecast)
@@ -129,3 +137,4 @@ def variational_kalman( observations, H_matrix, n_params,
     #                                    mask.ravel(), n_params=n_params)
     
     return x_analysis, None, A, innovations
+    
