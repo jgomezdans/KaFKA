@@ -234,7 +234,7 @@ def reconstruct_array(a_matrix, b_matrix, mask, n_params=1):
 
     if a_matrix.ndim == 1:
         for i in xrange(n_params):
-            b_matrix[ilocs +i*n] = a_matrix[(i*n_good):((i+1)*n_good)]
+            b_matrix[ilocs + i*n] = a_matrix[(i*n_good):((i+1)*n_good)]
     elif a_matrix.ndim == 2:
         for i in xrange(n_params):
             ii = 0

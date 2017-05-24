@@ -74,8 +74,8 @@ def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
     P_analysis_prime = tmp_matrix
     
     # Now move
-    
-    x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
+    # this copy isn't really needed as x_forecast is discarded...
+    x_analysis = reconstruct_array ( x_analysis_prime, x_forecast*1.,
                                         mask.ravel(), n_params=n_params)
     small_diagonal = np.array(P_analysis_prime.diagonal()).squeeze()
     big_diagonal = np.array(P_forecast.diagonal()).squeeze()

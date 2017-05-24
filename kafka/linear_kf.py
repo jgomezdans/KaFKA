@@ -310,7 +310,7 @@ class LinearKalman (object):
                             observations, mask, H_matrix,
                             x_forecast, P_forecast, P_forecast_inverse, 
                             R_mat, the_metadata)
-
+                    
                     x_forecast = x_analysis*1
                     P_forecast = P_analysis
                     P_forecast_inverse = P_analysis_inverse                    
