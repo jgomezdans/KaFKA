@@ -20,8 +20,8 @@ implementation basically performs a very fast update of the filter."""
 # You should have received a copy of the GNU General Public License
 # along with KaFKA.  If not, see <http://www.gnu.org/licenses/>.
 
-__author__ = "J Gomez-Dans"
-__copyright__ = "Copyright 2017 J Gomez-Dans"
+__author__ = "J Gomez-Dans, N Pounder"
+__copyright__ = "Copyright 2017 J Gomez-Dans, N Pounder"
 __version__ = "1.0 (09.03.2017)"
 __license__ = "GPLv3"
 __email__ = "j.gomez-dans@ucl.ac.uk"
@@ -69,16 +69,35 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         
     def _dump_output(self, step, timestep, x_analysis, P_analysis, 
                      P_analysis_inverse):
-        x1 = x_analysis[:(2400*2400)].reshape((2400,2400))
-        x2 = x_analysis[(2400*2400):(2*(2400*2400))].reshape((2400,2400))
-        x3 = x_analysis[2*(2400*2400):(3*(2400*2400))].reshape((2400,2400))
-        x = x1 + 0.189184*x2 - 1.377622*x3
+
+        outputs = {}
+        outputs['iso'] =  x_analysis[:(2400*2400)].reshape((2400,2400))
+        outputs['vol'] =  x_analysis[(2400*2400):2*(2400*2400)].reshape((2400,2400))
+        outputs['geo'] =  x_analysis[2*(2400*2400):3*(2400*2400)].reshape((2400,2400))
+
+        outputs['iso_unc'] =  P_analysis.diagonal()[:(2400*2400)].reshape((2400,2400))
+        outputs['vol_unc'] =  P_analysis.diagonal()[
+            (2400*2400):2*(2400*2400)].reshape((2400,2400))
+        outputs['geo_unc'] =  P_analysis.diagonal()[
+            2*(2400*2400):3*(2400*2400)].reshape((2400,2400))
+
+        outputs['bhr'] = outupts['iso']+outputs['vol']*0.189184 \
+            - outputs['geo']*1.377622
+        outputs['bhr_unc'] = outupts['iso_unc']+outputs['vol_unc']*0.189184 \
+            - outputs['geo_unc']*1.377622
+
+
         LOG.info("saving. Timestep %d, step %d" % (timestep, step))
-        self.output.GetRasterBand(timestep+1).WriteArray(x)
-        self.output.GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
-        LOG.info("**NOT** saving the whole state, only Isotropic. CHANGEME")
+        for key, the_array in outputs.iteritems():
+            self.output[key].GetRasterBand(timestep+1).WriteArray(the_array)
+            self.output[key].GetRasterBand(timestep+1).SetMetadata(
+                {'DoY':"%d"%(timestep)})
+
+
         if timestep % 10 == 0:
-            self.output.FlushCache()
+            for key, val in self.output.iteritems():
+                val.FlushCache()
+        #self.output['bhr'].FlushCache()
         #plt.imshow(x, interpolation='nearest', vmin=-0.1, vmax=0.5)
         #plt.title("%d-%d" % (step, timestep))
         #plt.show()
@@ -118,6 +137,24 @@ class MODISKernelLinearKalman (KernelLinearKalman):
                             vza/100., sza/100., raa/100.)
         return rho, R_mat, mask, metadata
 
+
+def create_output_file(template_file, location, suffix,
+                        n_bands=366,
+                        elements=['iso', 'vol','geo',
+                                    'iso_unc', 'vol_unc','geo_unc',
+                                    'bhr', 'bhr_unc'):
+    plethora = {}
+    drv = gdal.GetDriverByName("GTiff")
+    for el in elements:
+        fname = os.path.join(location, "{}_{}.tif".format(el, suffix))
+    
+        dst_ds = drv.Create (fname, 2400, 2400, n_bands, gdal.GDT_Float32,
+                            ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 
+                            'PREDICTOR=1', 'TILED=YES'])
+        dst_ds.SetProjection(template.GetProjection())
+        dst_ds.SetGeoTransform(template.GetGeoTransform())
+        plethora[el] = dst_ds
+    return plethora
 
 
 
@@ -167,13 +204,18 @@ def get_mcd43_prior(mcd43_fstring, band):
 
 
 if __name__ == "__main__":
-    the_dir="/storage/ucfajlg/Ujia/"
+
+    if os.path.exists("/storage/ucfajlg/Ujia/"):
+        the_dir="/storage/ucfajlg/Ujia/"
+    else:
+        the_dir="/data/selene/ucfajlg/Ujia/"
     g = gdal.Open(the_dir + "brdf_2016_b01.vrt")
     days = np.array([int(g.GetRasterBand(i+1).GetMetadata()['DoY'])
                             for i in xrange(g.RasterCount)])
 
     time_offset = np.nonzero(days == 46)[0][0] # First time DoY 46 is mentioned
     days = days[np.logical_and(days >= 45, days <= 90)]
+    
     modis_obs = MODIS_observations( days,
                 gdal.Open(os.path.join(the_dir, "statekm_2016.vrt")),
                 gdal.Open(os.path.join(the_dir, "SensorZenith_2016.vrt")),
@@ -188,22 +230,13 @@ if __name__ == "__main__":
                 gdal.Open(os.path.join(the_dir, "brdf_2016_b06.vrt")),
                 gdal.Open(os.path.join(the_dir, "brdf_2016_b07.vrt")))
 
-    # We can now create the output
-    # stuff stuff stuff
-    drv = gdal.GetDriverByName("GTiff")
-    dst_ds = drv.Create ("%s/test_nadir.tif" % the_dir, 2400, 2400, 366, gdal.GDT_Float32,
-                          ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 'PREDICTOR=1',
-                           'TILED=YES'])
-    dst_ds.SetProjection(modis_obs[1].GetProjection())
-    dst_ds.SetGeoTransform(modis_obs[1].GetGeoTransform())
+    output_plethora = create_output_file(g, the_dir, "test")
     
-
-    #output = OutputFile("/tmp/testme.nc", times=None, x=np.arange(2400),
-    #                    y=np.arange(2400))
-    kf = MODISKernelLinearKalman(modis_obs, days, dst_ds, [] )
+    kf = MODISKernelLinearKalman(modis_obs, days, output_plethora, [] )
     kf.time_offset = time_offset
     n = 2400
-    mcd43_fstring = "/data/selene/ucfajlg/Ujia/MCD43/MCD43_average_2016_001_030_b%d.tif"
+    mcd43_fstring = "/data/selene/ucfajlg/" + \
+                "Ujia/MCD43/MCD43_average_2016_001_030_b%d.tif"
     x_forecast, P_forecast = get_mcd43_prior(mcd43_fstring, 2)
     kf.set_trajectory_model(2400, 2400)
     q = np.ones(3*n*n, dtype=np.float32)*0.0001
@@ -212,5 +245,7 @@ if __name__ == "__main__":
     # The following runs the filter over time, selecting band 2 (NIR)
     # In order to calcualte BB albedos, you need to run the filter over
     # all bands, but you can do this in parallel
-    kf.run(x_forecast, P_forecast, None, band=2, refine_diag=False)
-    dst_ds = None
+    kf.run(x_forecast, P_forecast, None, band=band, refine_diag=False)
+    for key, val in output_plethora.iteritems():
+        val = None
+    LOG.info("FINISHED")
