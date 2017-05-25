@@ -69,7 +69,10 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         
     def _dump_output(self, step, timestep, x_analysis, P_analysis, 
                      P_analysis_inverse):
-        x = x_analysis[:(2400*2400)].reshape((2400,2400))
+        x1 = x_analysis[:(2400*2400)].reshape((2400,2400))
+        x2 = x_analysis[(2400*2400):(2*(2400*2400))].reshape((2400,2400))
+        x3 = x_analysis[2*(2400*2400):(3*(2400*2400))].reshape((2400,2400))
+        x = x1 + 0.189184*x2 - 1.377622*x3
         LOG.info("saving. Timestep %d, step %d" % (timestep, step))
         self.output.GetRasterBand(timestep+1).WriteArray(x)
         self.output.GetRasterBand(timestep+1).SetMetadata({'DoY':"%d"%(timestep)})
@@ -170,7 +173,7 @@ if __name__ == "__main__":
                             for i in xrange(g.RasterCount)])
 
     time_offset = np.nonzero(days == 46)[0][0] # First time DoY 46 is mentioned
-    days = days[np.logical_and(days >= 45, days <= 250)]
+    days = days[np.logical_and(days >= 45, days <= 90)]
     modis_obs = MODIS_observations( days,
                 gdal.Open(os.path.join(the_dir, "statekm_2016.vrt")),
                 gdal.Open(os.path.join(the_dir, "SensorZenith_2016.vrt")),
@@ -188,7 +191,7 @@ if __name__ == "__main__":
     # We can now create the output
     # stuff stuff stuff
     drv = gdal.GetDriverByName("GTiff")
-    dst_ds = drv.Create ("/tmp/test_nadir.tif", 2400, 2400, 366, gdal.GDT_Float32,
+    dst_ds = drv.Create ("%s/test_nadir.tif" % the_dir, 2400, 2400, 366, gdal.GDT_Float32,
                           ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 'PREDICTOR=1',
                            'TILED=YES'])
     dst_ds.SetProjection(modis_obs[1].GetProjection())
@@ -203,7 +206,9 @@ if __name__ == "__main__":
     mcd43_fstring = "/data/selene/ucfajlg/Ujia/MCD43/MCD43_average_2016_001_030_b%d.tif"
     x_forecast, P_forecast = get_mcd43_prior(mcd43_fstring, 2)
     kf.set_trajectory_model(2400, 2400)
-    kf.set_trajectory_uncertainty(0.01, 2400, 2400)
+    q = np.ones(3*n*n, dtype=np.float32)*0.0001
+    q[:(n*n)] = 0.001
+    kf.set_trajectory_uncertainty(q, 2400, 2400)
     # The following runs the filter over time, selecting band 2 (NIR)
     # In order to calcualte BB albedos, you need to run the filter over
     # all bands, but you can do this in parallel
