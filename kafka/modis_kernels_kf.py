@@ -34,16 +34,15 @@ import scipy.sparse as sp
 import matplotlib.pyplot as plt
 import numpy as np
 
-#from geoh5 import kea
 import gdal
 
 from linear_kernels_kf import KernelLinearKalman
-from solvers import variational_kalman
-#from utils import OutputFile # The netCDF writer
 
 # Set up logging
 import logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG, 
+                        format=
+                        '%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 LOG = logging.getLogger(__name__)
 
 
@@ -81,9 +80,9 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         outputs['geo_unc'] =  P_analysis.diagonal()[
             2*(2400*2400):3*(2400*2400)].reshape((2400,2400))
 
-        outputs['bhr'] = outupts['iso']+outputs['vol']*0.189184 \
+        outputs['bhr'] = outputs['iso']+outputs['vol']*0.189184 \
             - outputs['geo']*1.377622
-        outputs['bhr_unc'] = outupts['iso_unc']+outputs['vol_unc']*0.189184 \
+        outputs['bhr_unc'] = outputs['iso_unc']+outputs['vol_unc']*0.189184 \
             - outputs['geo_unc']*1.377622
 
 
@@ -142,7 +141,7 @@ def create_output_file(template_file, location, suffix,
                         n_bands=366,
                         elements=['iso', 'vol','geo',
                                     'iso_unc', 'vol_unc','geo_unc',
-                                    'bhr', 'bhr_unc'):
+                                    'bhr', 'bhr_unc']):
     plethora = {}
     drv = gdal.GetDriverByName("GTiff")
     for el in elements:
@@ -151,8 +150,8 @@ def create_output_file(template_file, location, suffix,
         dst_ds = drv.Create (fname, 2400, 2400, n_bands, gdal.GDT_Float32,
                             ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 
                             'PREDICTOR=1', 'TILED=YES'])
-        dst_ds.SetProjection(template.GetProjection())
-        dst_ds.SetGeoTransform(template.GetGeoTransform())
+        dst_ds.SetProjection(template_file.GetProjection())
+        dst_ds.SetGeoTransform(template_file.GetGeoTransform())
         plethora[el] = dst_ds
     return plethora
 
@@ -212,7 +211,7 @@ if __name__ == "__main__":
     g = gdal.Open(the_dir + "brdf_2016_b01.vrt")
     days = np.array([int(g.GetRasterBand(i+1).GetMetadata()['DoY'])
                             for i in xrange(g.RasterCount)])
-
+    band = 2
     time_offset = np.nonzero(days == 46)[0][0] # First time DoY 46 is mentioned
     days = days[np.logical_and(days >= 45, days <= 90)]
     
@@ -238,10 +237,10 @@ if __name__ == "__main__":
     mcd43_fstring = "/data/selene/ucfajlg/" + \
                 "Ujia/MCD43/MCD43_average_2016_001_030_b%d.tif"
     x_forecast, P_forecast = get_mcd43_prior(mcd43_fstring, 2)
-    kf.set_trajectory_model(2400, 2400)
+    kf.set_trajectory_model(n, n)
     q = np.ones(3*n*n, dtype=np.float32)*0.0001
     q[:(n*n)] = 0.001
-    kf.set_trajectory_uncertainty(q, 2400, 2400)
+    kf.set_trajectory_uncertainty(q, n, n)
     # The following runs the filter over time, selecting band 2 (NIR)
     # In order to calcualte BB albedos, you need to run the filter over
     # all bands, but you can do this in parallel
