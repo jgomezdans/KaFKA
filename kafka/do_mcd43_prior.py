@@ -107,15 +107,17 @@ def do_command_line():
                         type=int, help="Starting DoY")
     required.add_argument("-e", "--end", dest="doy_end", action="store",
                         type=int, help="Ending DoY")
+    required.add_argument("-o", "--out", dest="output_folder", action="store", 
+                        type=str, help="Where the GeoTif will be saved")
     
     args = parser.parse_args()
     return (args.data_folder, args.tile, args.year, args.doy_start,
-            args.doy_end)
+            args.doy_end, args.output_folder)
 
 
 if __name__ == "__main__":
 
-    data_dir, tile, year, doy_start, doy_end = do_command_line()
+    data_dir, tile, year, doy_start, doy_end, output_dir = do_command_line()
     if not 1 <= doy_start <= 366:
         raise ValueError, "Starting date out of range: %d" % doy_start
     if not 1 <= doy_end <= 366:
@@ -134,7 +136,7 @@ if __name__ == "__main__":
         par3 = []
         for f1, f2 in zip(a1_files, a2_files):
             print "\t>>>Reading %s" % f1
-            data, proj, geoT = read_mcd43 (2, f1, f2)
+            data, proj, geoT = read_mcd43 (band, f1, f2)
             par1.append ( data[0, :, :])
             par2.append ( data[1, :, :])
             par3.append ( data[2, :, :])
@@ -146,7 +148,7 @@ if __name__ == "__main__":
         S3 = np.nanstd( par3, axis=0 ).astype(np.float32)
         Nsamples = np.sum(~np.isnan(par1), axis=0).astype(np.float32)
         drv = gdal.GetDriverByName("GTiff")
-        dst_ds = drv.Create (os.path.join(data_dir, 
+        dst_ds = drv.Create (os.path.join(output_dir, 
             "MCD43_average_%04d_%03d_%03d_b%d.tif" %(
             year, doy_start, doy_end, band)),
             2400, 2400, 7, gdal.GDT_Float32, ['COMPRESS=DEFLATE', 
