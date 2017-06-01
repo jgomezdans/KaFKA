@@ -195,8 +195,8 @@ def get_mcd43_prior(mcd43_fstring, band):
     
 
     
-    P_forecast = sp.eye(3*n, 3*n, format="csc", dtype=np.float32)
-    P_forecast.setdiag(sigma**2)
+    P_forecast = sp.eye(3*n, 3*n, format="csc", dtype=np.float32)*0.1
+    #P_forecast.setdiag(sigma**2)
     
     return x_forecast, P_forecast
 
@@ -208,12 +208,13 @@ if __name__ == "__main__":
         the_dir="/storage/ucfajlg/Ujia/"
     else:
         the_dir="/data/selene/ucfajlg/Ujia/"
+
     g = gdal.Open(the_dir + "brdf_2016_b01.vrt")
     days = np.array([int(g.GetRasterBand(i+1).GetMetadata()['DoY'])
                             for i in xrange(g.RasterCount)])
     band = 2
     time_offset = np.nonzero(days == 46)[0][0] # First time DoY 46 is mentioned
-    days = days[np.logical_and(days >= 45, days <= 90)]
+    days = days[np.logical_and(days >= 45, days <= 365)]
     
     modis_obs = MODIS_observations( days,
                 gdal.Open(os.path.join(the_dir, "statekm_2016.vrt")),
@@ -229,14 +230,14 @@ if __name__ == "__main__":
                 gdal.Open(os.path.join(the_dir, "brdf_2016_b06.vrt")),
                 gdal.Open(os.path.join(the_dir, "brdf_2016_b07.vrt")))
 
-    output_plethora = create_output_file(g, the_dir, "test")
+    output_plethora = create_output_file(g, the_dir, "band{}".format(band))
     
-    kf = MODISKernelLinearKalman(modis_obs, days, output_plethora, [] )
+    kf = MODISKernelLinearKalman(modis_obs, days, output_plethora, [], the_band=band )
     kf.time_offset = time_offset
     n = 2400
     mcd43_fstring = "/data/selene/ucfajlg/" + \
                 "Ujia/MCD43/MCD43_average_2016_001_030_b%d.tif"
-    x_forecast, P_forecast = get_mcd43_prior(mcd43_fstring, 2)
+    x_forecast, P_forecast = get_mcd43_prior(mcd43_fstring, band)
     kf.set_trajectory_model(n, n)
     q = np.ones(3*n*n, dtype=np.float32)*0.0001
     q[:(n*n)] = 0.001
@@ -244,6 +245,7 @@ if __name__ == "__main__":
     # The following runs the filter over time, selecting band 2 (NIR)
     # In order to calcualte BB albedos, you need to run the filter over
     # all bands, but you can do this in parallel
+
     kf.run(x_forecast, P_forecast, None, band=band, refine_diag=False)
     for key, val in output_plethora.iteritems():
         val = None
