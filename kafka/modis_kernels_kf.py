@@ -195,8 +195,8 @@ def get_mcd43_prior(mcd43_fstring, band):
     
 
     
-    P_forecast = sp.eye(3*n, 3*n, format="csc", dtype=np.float32)*0.1
-    #P_forecast.setdiag(sigma**2)
+    P_forecast = sp.eye(3*n, 3*n, format="csc", dtype=np.float32)
+    P_forecast.setdiag(sigma**2)
     
     return x_forecast, P_forecast
 
