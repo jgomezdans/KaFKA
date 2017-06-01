@@ -155,6 +155,8 @@ if __name__ == "__main__":
             'BIGTIFF=YES', 'PREDICTOR=1','TILED=YES'])
         print "Saving to MCD43_average_%04d_%03d_%03d_b%d.tif" %(
             year, doy_start, doy_end, band)
+        dst_ds.SetProjection(proj)
+        dst_ds.SetGeoTransform(geoT)
         dst_ds.GetRasterBand(1).WriteArray(P1) # Mean isotropic
         dst_ds.GetRasterBand(2).WriteArray(P2) # Mean volumetric
         dst_ds.GetRasterBand(3).WriteArray(P3) # Mean geometric
