@@ -170,7 +170,7 @@ class LinearKalman (object):
         available. In the case of the observations being missing, the 
         uncertainty is set to 0.
         """
-        all_obs = mask.shape[0]
+        all_obs = np.product(mask.shape)
         R_mat = np.ones (all_obs)*uncertainty*uncertainty
         R_mat[~mask] = 0.0
         return sp.dia_matrix((R_mat, 0), shape=(R_mat.shape[0], R_mat.shape[0]))
