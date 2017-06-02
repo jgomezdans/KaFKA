@@ -41,49 +41,24 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
             x_forecast, P_forecast, R_mat, the_metadata, approx_diagonal=True):
 
-
-    LOG.info("Squeezing prior covariance...")                                  
+    LOG.info("Diagonal covariance solver")
     the_mask = np.array([mask.ravel() for i in xrange(n_params)]).ravel() 
-    # Only diagonal considered
-    P_forecast_prime = np.array(P_forecast.diagonal()).squeeze()[the_mask]
-                
+
+    S = (H_matrix.dot(P_forecast.dot(H_matrix.T))) + R_mat
+    Sd = np.zeros_like(x_forecast)
+    Sd[the_mask] = 1./(S.diagonal()[the_mask])
+    Sinv = sp.eye(Sd.shape[0])
+    Sinv.setdiag(Sd)
     
-    
-    #R_mat_prime = np.array(R_mat.diagonal()).squeeze()
-    A = sp.eye(P_forecast_prime.shape[0])
-    A.setdiag(P_forecast_prime)
-    S = (H_matrix.dot(A.dot(H_matrix.T))) + R_mat
-    Sinv = sp.eye(S.shape[0])
-    Sinv.setdiag(1./S.diagonal())
-    nn1 = R_mat.shape[0]
-    kalman_gain = A.dot(H_matrix.T)
-    kalman_gain = kalman_gain.dot(Sinv)
-    
-    x_forecast_prime = matrix_squeeze(x_forecast, mask=mask.ravel(),
-                                                          n_params=n_params)
-    innovations_prime = (observations.ravel()[mask.ravel()] -
-                                             H_matrix.dot(x_forecast_prime))
-    x_analysis_prime = x_forecast_prime + \
-                                           kalman_gain*innovations_prime
-    P_analysis_prime = (sp.eye(n_params*nn1, n_params*nn1, 
-                               dtype=np.float32) - (kalman_gain.dot(
-                                   H_matrix)).dot(A))
-    tmp_matrix = sp.eye(nn1)
-    tmp_matrix.setdiag(P_analysis_prime.diagonal())
+    kalman_gain = (P_forecast.dot(H_matrix.T)).dot(Sinv)
+  
+    innovations = (observations.ravel() - H_matrix.dot(x_forecast))
+    innovations[mask] = 0.
+    x_analysis = x0 + kalman_gain*innovations
+    P_analysis = (sp.eye(x_analysis.shape[0]) -
+                  kalman_gain.dot(H_matrix)).dot(P_forecast)
     P_analysis_prime = None
-    P_analysis_prime = tmp_matrix
-    
-    # Now move
-    # this copy isn't really needed as x_forecast is discarded...
-    x_analysis = reconstruct_array ( x_analysis_prime, x_forecast*1.,
-                                        mask.ravel(), n_params=n_params)
-    small_diagonal = np.array(P_analysis_prime.diagonal()).squeeze()
-    big_diagonal = np.array(P_forecast.diagonal()).squeeze()
-    LOG.info("Inflate analysis covariance")
-    P_analysis_diag = reconstruct_array(small_diagonal, big_diagonal,
-                                    mask, n_params=n_params)
-    P_analysis = sp.dia_matrix ( (P_analysis_diag, 0),
-                                    shape=P_forecast.shape)
+    LOG.info("Solved!")
     return x_analysis, P_analysis, None, innovations_prime
 
 
