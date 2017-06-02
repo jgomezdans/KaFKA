@@ -53,7 +53,7 @@ def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
     kalman_gain = (P_forecast.dot(H_matrix.T)).dot(Sinv)
   
     innovations = (observations.ravel() - H_matrix.dot(x_forecast))
-    innovations[mask.ravel()] = 0.
+    innovations[~mask.ravel()] = 0.
     x_analysis = x_forecast + kalman_gain*innovations
     P_analysis = (sp.eye(x_analysis.shape[0]) -
                   kalman_gain.dot(H_matrix)).dot(P_forecast)
