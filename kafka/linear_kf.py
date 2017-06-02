@@ -166,10 +166,13 @@ class LinearKalman (object):
     def create_uncertainty(self, uncertainty, mask):
         """Creates the observational uncertainty matrix. We assume that
         uncertainty is a single value and we return a diagonal matrix back.
-        We present this diagonal **ONLY** for pixels that have observations
-        (i.e. not masked)."""
-        good_obs = mask.sum()
-        R_mat = np.ones (good_obs)*uncertainty*uncertainty
+        The matrix encompasses all pixels, even if no observations were 
+        available. In the case of the observations being missing, the 
+        uncertainty is set to 0.
+        """
+        all_obs = mask.shape[0]
+        R_mat = np.ones (all_obs)*uncertainty*uncertainty
+        R_mat[~mask] = 0.0
         return sp.dia_matrix((R_mat, 0), shape=(R_mat.shape[0], R_mat.shape[0]))
 
     def create_observation_operator (self, metadata, x_forecast, band=None):
