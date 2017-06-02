@@ -61,13 +61,18 @@ class KernelLinearKalman (LinearKalman):
                             doIntegrals=False, normalise=1, RecipFlag=True,
                             RossHS=False, MODISSPARSE=True, RossType="Thick")
         good_obs = metadata.mask.sum() # size of H_matrix
-        zz = np.zeros(good_obs)
+        all_obs = metadata.mask.shape[0] # All obs
+        zz = np.zeros(all_obs)
+        ross = zz * 0.
+        li = zz * 0.
+        ross[metadata.mask] = K.Ross
+        li[metadata.mask] = K.Li
         data = np.c_[np.r_[np.ones(good_obs), zz, zz],
-                            np.r_[zz, K.Ross[:], zz],
-                            np.r_[zz, zz, K.Li[:]]].T
-        offsets = [ 0, good_obs, 2*good_obs]
+                            np.r_[zz, ross, zz],
+                            np.r_[zz, zz, li]].T
+        offsets = [ 0, all_obs, 2*all_obs]
         H_matrix = sp.dia_matrix((data, offsets),
-                                 shape=(good_obs, self.n_params*good_obs ),
+                                 shape=(all_obs, self.n_params*all_obs ),
                                  dtype=np.float32)
         # The following arrangement is all isotropics, all volumetrics and then
         # all geometrics. For the non-linear model, it might be better to have
