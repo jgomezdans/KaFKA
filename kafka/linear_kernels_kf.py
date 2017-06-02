@@ -61,13 +61,13 @@ class KernelLinearKalman (LinearKalman):
                             doIntegrals=False, normalise=1, RecipFlag=True,
                             RossHS=False, MODISSPARSE=True, RossType="Thick")
         good_obs = metadata.mask.sum() # size of H_matrix
-        all_obs = metadata.mask.shape[0] # All obs
+        all_obs = metadata.mask.ravel().shape[0] # All obs
         zz = np.zeros(all_obs)
         ross = zz * 0.
         li = zz * 0.
-        ross[metadata.mask] = K.Ross
-        li[metadata.mask] = K.Li
-        data = np.c_[np.r_[np.ones(good_obs), zz, zz],
+        ross[metadata.mask.flatten()] = K.Ross
+        li[metadata.mask.flatten()] = K.Li
+        data = np.c_[np.r_[np.ones(all_obs), zz, zz],
                             np.r_[zz, ross, zz],
                             np.r_[zz, zz, li]].T
         offsets = [ 0, all_obs, 2*all_obs]

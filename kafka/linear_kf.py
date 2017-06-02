@@ -172,7 +172,7 @@ class LinearKalman (object):
         """
         all_obs = np.product(mask.shape)
         R_mat = np.ones (all_obs)*uncertainty*uncertainty
-        R_mat[~mask] = 0.0
+        R_mat[~(mask.flatten())] = 0.0
         return sp.dia_matrix((R_mat, 0), shape=(R_mat.shape[0], R_mat.shape[0]))
 
     def create_observation_operator (self, metadata, x_forecast, band=None):
