@@ -42,24 +42,25 @@ def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
             x_forecast, P_forecast, R_mat, the_metadata, approx_diagonal=True):
 
     LOG.info("Diagonal covariance solver")
+
     the_mask = np.array([mask.ravel() for i in xrange(n_params)]).ravel() 
 
     S = (H_matrix.dot(P_forecast.dot(H_matrix.T))) + R_mat
-    Sd = np.zeros_like(x_forecast)
-    Sd[the_mask] = 1./(S.diagonal()[the_mask])
+    Sd = np.zeros(x_forecast.shape[0]/n_params)
+    Sd[mask.ravel()] = 1./(S.diagonal()[mask.ravel()])
     Sinv = sp.eye(Sd.shape[0])
     Sinv.setdiag(Sd)
     
     kalman_gain = (P_forecast.dot(H_matrix.T)).dot(Sinv)
   
     innovations = (observations.ravel() - H_matrix.dot(x_forecast))
-    innovations[mask] = 0.
-    x_analysis = x0 + kalman_gain*innovations
+    innovations[~mask.ravel()] = 0.
+    x_analysis = x_forecast + kalman_gain*innovations
     P_analysis = (sp.eye(x_analysis.shape[0]) -
                   kalman_gain.dot(H_matrix)).dot(P_forecast)
     P_analysis_prime = None
     LOG.info("Solved!")
-    return x_analysis, P_analysis, None, innovations_prime
+    return x_analysis, P_analysis, None, innovations[~mask.ravel()]
 
 
 def kalman_divide_conquer( observations, H_matrix, n_params,
