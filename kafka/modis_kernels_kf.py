@@ -229,8 +229,7 @@ if __name__ == "__main__":
                 gdal.Open(os.path.join(the_dir, "brdf_2016_b05.vrt")),
                 gdal.Open(os.path.join(the_dir, "brdf_2016_b06.vrt")),
                 gdal.Open(os.path.join(the_dir, "brdf_2016_b07.vrt")))
-
-    output_plethora = create_output_file(g, the_dir, "band{}".format(band))
+    output_plethora = create_output_file(g, "tmp/", "band{}_testSolver_lowinflate".format(band))
     
     kf = MODISKernelLinearKalman(modis_obs, days, output_plethora, [], the_band=band )
     kf.time_offset = time_offset
@@ -239,8 +238,8 @@ if __name__ == "__main__":
                 "Ujia/MCD43/MCD43_average_2016_001_030_b%d.tif"
     x_forecast, P_forecast = get_mcd43_prior(mcd43_fstring, band)
     kf.set_trajectory_model(n, n)
-    q = np.ones(3*n*n, dtype=np.float32)*0.0001
-    q[:(n*n)] = 0.001
+    q = np.ones(3*n*n, dtype=np.float32)*0.00001
+    #q[:(n*n)] = 0.0001
     kf.set_trajectory_uncertainty(q, n, n)
     # The following runs the filter over time, selecting band 2 (NIR)
     # In order to calcualte BB albedos, you need to run the filter over
