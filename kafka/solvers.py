@@ -45,7 +45,7 @@ def linear_diagonal_solver ( observations, mask, H_matrix, n_params,
     the_mask = np.array([mask.ravel() for i in xrange(n_params)]).ravel() 
 
     S = (H_matrix.dot(P_forecast.dot(H_matrix.T))) + R_mat
-    Sd = np.zeros_like(x_forecast.shape[0]/n_params)
+    Sd = np.zeros(x_forecast.shape[0]/n_params)
     Sd[mask.ravel()] = 1./(S.diagonal()[mask.ravel()])
     Sinv = sp.eye(Sd.shape[0])
     Sinv.setdiag(Sd)
