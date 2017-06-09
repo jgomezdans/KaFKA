@@ -130,7 +130,7 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         rho = rho_pntr.GetRasterBand(timestep + 1).ReadAsArray()/10000.
         # Taken from http://modis-sr.ltdri.org/pages/validation.html
         modis_uncertainty=np.array([0.005, 0.014, 0.008, 0.005, 0.012,
-                                    0.006, 0.003])[self.the_band]
+                                    0.006, 0.003])[self.the_band-1]
         R_mat = self.create_uncertainty(modis_uncertainty, mask)
         metadata = Metadata(mask, modis_uncertainty, 
                             vza/100., sza/100., raa/100.)
@@ -230,13 +230,14 @@ if __name__ == "__main__":
                 gdal.Open(os.path.join(the_dir, "brdf_2016_b06.vrt")),
                 gdal.Open(os.path.join(the_dir, "brdf_2016_b07.vrt")))
 
-    output_plethora = create_output_file(g, the_dir, "band{}".format(band))
+    output_plethora = create_output_file(g, "kernels/", "band{}".format(band))
     
     kf = MODISKernelLinearKalman(modis_obs, days, output_plethora, [], the_band=band )
     kf.time_offset = time_offset
     n = 2400
-    mcd43_fstring = "/data/selene/ucfajlg/" + \
-                "Ujia/MCD43/MCD43_average_2016_001_030_b%d.tif"
+    #mcd43_fstring = "/data/selene/ucfajlg/" + \
+    #            "Ujia/MCD43/MCD43_average_2016_001_030_b%d.tif"
+    mcd43_fstring = "tmp/Prior/MCD43_average_2016_001_030_b%d.tif"
     x_forecast, P_forecast = get_mcd43_prior(mcd43_fstring, band)
     kf.set_trajectory_model(n, n)
     q = np.ones(3*n*n, dtype=np.float32)*0.0001
