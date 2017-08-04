@@ -166,13 +166,10 @@ class LinearKalman (object):
     def create_uncertainty(self, uncertainty, mask):
         """Creates the observational uncertainty matrix. We assume that
         uncertainty is a single value and we return a diagonal matrix back.
-        The matrix encompasses all pixels, even if no observations were 
-        available. In the case of the observations being missing, the 
-        uncertainty is set to 0.
-        """
-        all_obs = np.product(mask.shape)
-        R_mat = np.ones (all_obs)*uncertainty*uncertainty
-        R_mat[~(mask.flatten())] = 0.0
+        We present this diagonal **ONLY** for pixels that have observations
+        (i.e. not masked)."""
+        good_obs = mask.sum()
+        R_mat = np.ones (good_obs)*uncertainty*uncertainty
         return sp.dia_matrix((R_mat, 0), shape=(R_mat.shape[0], R_mat.shape[0]))
 
     def create_observation_operator (self, metadata, x_forecast, band=None):
@@ -183,23 +180,28 @@ class LinearKalman (object):
         return H_matrix
 
     def advance(self, x_analysis, P_analysis, P_analysis_inverse):
-        """Advance the state"""
+        """Advance the state. If we have to update the state
+        precision matrix, I use the information filter formalism.
+        """
         # Needs to deal with the inverse analysis matrix ;-/
-        # If P_analysis_inverse is block_diagonal.... EASY
-        # see notes
         x_forecast = self.trajectory_model.dot(x_analysis)
         if sp.issparse(self.trajectory_uncertainty) and P_analysis is not None:
             P_forecast = P_analysis + self.trajectory_uncertainty
             P_forecast_inverse = None
         elif sp.issparse(self.trajectory_uncertainty) and P_analysis is None:
-            LOG.info("Updating prior *invese covariance*")
-            LOG.info("Only updates main diagonal")
-            diag = 1./P_analysis_inverse.diagonal()
-            P_approx = sp.dia_matrix((diag, 0), 
-                                     shape=P_analysis_inverse.shape) + \
-                self.trajectory_uncertainty
-            P_forecast_inverse = P_analysis_inverse.copy()
-            P_forecast_inverse.setdiag( 1./P_approx.diagonal() )
+            LOG.info("Updating prior *inverse covariance*")
+            # These is an approximation to the information filter equations
+            #(see e.g. Terejanu's notes)
+            M = P_analysis_inverse # for convenience and to stay with 
+                                   # Terejanu's notation
+            # Main assumption here is that the "inflation" factor is
+            # calculated using the main diagonal of M
+            PQ_matrix = (np.ones(M.shape[0]) + (1./(M.diagonal())*
+                                                Q.diagonal()))
+            # Update P_f = P_a^{-1}/(I+P_a^{-1}.diag + Q)
+            P_forecast_inverse = M*sp.dia_matrix((PQ_matrix,0), 
+                                                 shape=M.shape)
+            
             P_forecast = None
             
         else:
@@ -334,12 +336,6 @@ class LinearKalman (object):
                     x_prev = x_analysis*1.
                     LOG.info("Iteration %d convergence: %g" %( n_iter, 
                                                             convergence_norm))
-        #                if is_robust and converged:
-        #                    break
-        #                    # TODO robust re-masking
-        #                    # We should have a robust mechanism that checks whether the state
-        #                    # is too far from the observations, and if so, flag them as
-        #                    # outliers
                 else:
                     break
 
@@ -355,7 +351,11 @@ class LinearKalman (object):
                     # Break if we go over 10 iterations
                     LOG.info("Wow, too many iterations (%d)!"%n_iter)
                     LOG.info("Stopping iterations here")
+                    converged = True
                     break
+            if is_robust and converged:
+                # TODO update mask using innovations
+            
         if self.diagnostics:
             LOG.info("Plotting")
             self._plotter_iteration_end(plot_object, x_analysis,
