@@ -130,7 +130,7 @@ class MODISKernelLinearKalman (KernelLinearKalman):
         rho = rho_pntr.GetRasterBand(timestep + 1).ReadAsArray()/10000.
         # Taken from http://modis-sr.ltdri.org/pages/validation.html
         modis_uncertainty=np.array([0.005, 0.014, 0.008, 0.005, 0.012,
-                                    0.006, 0.003])[self.the_band]
+                                    0.006, 0.003])[self.the_band-1]
         R_mat = self.create_uncertainty(modis_uncertainty, mask)
         metadata = Metadata(mask, modis_uncertainty, 
                             vza/100., sza/100., raa/100.)
