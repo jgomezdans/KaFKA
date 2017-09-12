@@ -94,7 +94,8 @@ class NonLinearKalman (LinearKalman):
             if metadata.mask.ravel()[i]:
                 x0[i, :] = x_forecast[state_mapper + self.n_params*i]
         LOG.info("Running emulators") 
-        H0_, dH = self.emulator.predict(x0[metadata.mask.ravel()], do_unc=False)
+        H0_, dH = self.emulator.predict(x0[metadata.mask.ravel()], 
+                                        do_unc=False)
         n = 0
         LOG.info("Storing emulators in H matrix")
         for i in xrange(n_times):

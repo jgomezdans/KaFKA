@@ -43,6 +43,7 @@ import glob
 import os
 import datetime
 from collections import namedtuple
+import cPickle
 
 import numpy as np
 import gdal
@@ -75,10 +76,11 @@ def get_modis_dates (fnames):
         
     return dates
 
+# TODO needs class for MODIS L1b product too 
+# These classes should define emulators
 
 
-
-class MOD09_Observations(object):
+class MOD09_ObservationsKernels(object):
     """A generic M*D09 data reader"""
     def __init__ (self, dates, filenames):
         if not len(dates) == len(filenames):
@@ -93,7 +95,11 @@ class MOD09_Observations(object):
         QA_OK = np.array([8, 72, 136, 200, 1032, 1288, 2056, 2120, 
                           2184, 2248])
         unc = [0.004, 0.015, 0.003, 0.004, 0.013, 0.010, 0.006]
-        iloc = self.dates.index(the_date)
+        try:
+            iloc = self.dates.index(the_date)
+        except ValueError:
+            # No observations found
+            return None
         fname = self.filenames[iloc] # Get the HDF filename
         # Read in reflectance
         g = gdal.Open('HDF4_EOS:EOS_GRID:"{}"'.format(fname) + 
@@ -133,7 +139,76 @@ class MOD09_Observations(object):
         data_object = MOD09_data(refl, mask, uncertainty, K, sza, vza, raa)
 
         return data_object
-    
+
+def SynergyKernels(object):
+    """An object to store, process and update linear kernel weights datasets
+    produced by the Synergy processing chain"""
+    def __init__ (self, directory, tile, start_time, end_time=None):
+
+        fnames = glob.glob( "%s/*.%s*_b0_kernel_weights.tif" %
+                            (directory, tile) )
+        dates = []
+        kernels = []
+        uncertainties = []
+        masks = []
+        for fname in fnames:
+            txt_string = os.path.basename(fname).split(".")[1][1:]
+            date = datetime.datetime.strptime(txt_string, "%Y%j")
+            if (start_time >= date) and ( (end_time is None) or
+                                              (date <= end_time)):
+                dates.append(date)
+                kernels.append(fname)
+                uncertainties.append(fname.replace("kernel_weights",
+                                                   "kernel_unc"))
+                masks.append ( fname.replace("_b0_kernel_weights", "mask"))
+        self.dates = dates
+        self.kernels = kernels
+        self.uncertainties = uncertainties
+        self.masks = masks
+
+
+    def add_observations(self, the_date, the_kernels, the_uncs, the_mask):
+        """Adds observations to the list. Assume the date is datetime object,
+        and all files are strings to files that exist."""
+        self.dates.append(the_date)
+        self.kernels.append(the_kernels)
+        self.uncertainties.append(the_uncs)
+        self.masks.append(the_mask)
+
+
+    def get_band_data(self, the_date, band_no):
+        """Assume `band_no` is 0 for VIS and 1 for NIR (BB)"""
+        # the integrals of the kernels
+        to_BHR = np.array([1.0, 0.189184, -1.377622])
+
+
+
+        # the spectral integration for BB (MODIS bands)
+        to_VIS = np.array([0.3265, 0., 0.4364, 0.2366, 0, 0, 0])
+        a_to_VIS = -0.0019
+        to_NIR = np.array([0., 0.5447, 0, 0, 0.1363, 0.0469, 0.2536])
+        a_to_NIR = -0.0068
+
+        # find the requested date
+        date_idx = self.dates.index(the_date)
+        BHR = []
+        for band in xrange(7):
+            g = gdal.Open(self.kernels[date_idx].replace ("b0", "b%d"%band))
+            kernels = g.ReadAsArray() # 3*nx*ny
+            BHR.append ( np.sum(kernels * to_BHR[:, None, None], axis=0))
+            # Taking the mask into account, we can add a where statement
+            #np.where(mask,
+            #          kernels * to_BHR[:, None, None], np.nan).sum(axis=0)
+            # Uncertainty is also straightforward if no correlation is assumed
+        BHR = np.array(BHR)
+        # Under the assumption that kernels are
+        if band_no == 0: # VIS
+            BHR = np.sum(BHR*to_vis, axis=0) + a_to_VIS
+        elif band_no == 1:
+            BHR = np.sum(BHR * to_nir, axis=0) + a_to_NIR
+
+
+
 
 
 class BHRObservations(BRDF_descriptors):
@@ -153,10 +228,19 @@ class BHRObservations(BRDF_descriptors):
          super().__init__(tile, mcd43a1_dir, start_time, end_time, 
                           mcd43a2_dir)
          
+    def _get_emulator(self, emulator):
+        if not os.path.exists(emulator):
+            raise IOError("The emulator {} doesn't exist!".format(emulator))
+        # Assuming emulator is in an pickle file...
+        self.emulator = cPickle.load(open(emulator, 'rb')) 
+         
     def get_band_data(self, the_date, band_no):
         
         to_BHR = np.array([1.0, 0.189184, -1.377622])
-        kernels, mask, qa_level = self.get_brdf_descriptors(band_no, date)
+        retval = self.get_brdf_descriptors(band_no, date)
+        if retval is None: # No data on this date
+            return None
+        kernels, mask, qa_level = retval
         bhr = np.where(mask,
                        kernels * to_BHR[:, None, None], np.nan).sum(axis=0)
         R_mat = np.zeros_like(bhr)
@@ -164,5 +248,5 @@ class BHRObservations(BRDF_descriptors):
         R_mat[qa_level == 1] = np.maximum(2.5e-3, bhr[qa_level == 1] * 0.07)
         R_mat[np.logical_not(mask)] = 0.
         
-        bhr_data = BHR_data(bhr, mask, R_mat, None)
+        bhr_data = BHR_data(bhr, mask, R_mat, self.emulator)
         return bhr_data
