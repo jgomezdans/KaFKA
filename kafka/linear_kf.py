@@ -202,6 +202,8 @@ class LinearKalman (object):
         return (data.observations, data.R_mat, data.mask.ravel(), 
                 data.metadata)
 
+    def ingest(self, the_date, x_forecast, P_forecast, P_forecast_inverse):
+        """Ingests observations up to `the_date`. It allows one to """
     def run(self, time_grid, x_forecast, P_forecast, P_forecast_inverse,
                    diag_str="diagnostics",
                    band=None, approx_diagonal=True, refine_diag=True,
