@@ -263,4 +263,5 @@ if __name__ == "__main__":
     start_time = "2017001"
     mcd43a1_dir="/storage/ucfajlg/Ujia/MCD43/"
     bhr_data =  BHRObservations(emulator, tile, mcd43a1_dir, start_time, end_time=None, mcd43a2_dir=None)
-    b=bhr_data.get_band_data(datetime.datetime(2017,1,1), 1)
+    vis=bhr_data.get_band_data(datetime.datetime(2017,8,1), "vis")
+    nir=bhr_data.get_band_data(datetime.datetime(2017,8,1), "nir")
