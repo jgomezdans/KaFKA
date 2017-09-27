@@ -243,7 +243,7 @@ class LinearKalman (object):
         """
         data = self.observations.get_band_data(timestep, band)
         return (data.observations, data.R_mat, data.mask.ravel(), 
-                data.metadata)
+                data.metadata, data.emulator)
 
     def run(self, time_grid, x_forecast, P_forecast, P_forecast_inverse,
                    diag_str="diagnostics",
@@ -314,24 +314,19 @@ class LinearKalman (object):
                     cached_obs = []
                     for band in xrange(self.bands_per_observation):
                         if self.bands_per_observation == 1:
-                            observations, R_mat, mask, the_metadata, emulator =\
-                                self._get_observations_timestep(step, None)
+                            observations, R_mat, mask, the_metadata, emulator \
+                                = self._get_observations_timestep(step, None)
                         else:
-                            observations, R_mat, mask, the_metadata, emulator =\
-                                self._get_observations_timestep(step, band)
+                            observations, R_mat, mask, the_metadata, emulator \
+                                = self._get_observations_timestep(step, band)
                         cached_obs.append ( (observations, R_mat, mask, 
                                            the_metadata, emulator) )
                         
                 n_iter += 1
                 for band in xrange(self.bands_per_observation):
                     LOG.info("Band %d" % band)
-                    # Extract observations, mask and uncertainty for the current time
-                    #if self.bands_per_observation == 1:
-                        #observations, R_mat, mask, the_metadata = \
-                            #self._get_observations_timestep(step, None)
-                    #else:
-                        #observations, R_mat, mask, the_metadata = \
-                            #self._get_observations_timestep(step, band)
+                    # Extract obs, mask and uncertainty for current time
+                    # From cache
                     observations, R_mat, mask, the_metadata, the_emulator  = \
                         cached_obs[band]
                     if self.diagnostics:

@@ -64,7 +64,7 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 MOD09_data = namedtuple ("MOD09_data", 
                          "reflectance mask uncertainty obs_op sza vza raa")
 BHR_data = namedtuple("BHR_data",
-                        "albedo mask uncertainty obs_op")
+                        "albedo mask uncertainty metadata emulator")
 
 def get_modis_dates (fnames):
     """Extract MODIS dates from filenames"""
@@ -248,5 +248,5 @@ class BHRObservations(BRDF_descriptors):
         R_mat[qa_level == 1] = np.maximum(2.5e-3, bhr[qa_level == 1] * 0.07)
         R_mat[np.logical_not(mask)] = 0.
         
-        bhr_data = BHR_data(bhr, mask, R_mat, self.emulator)
+        bhr_data = BHR_data(bhr, mask, R_mat, None, self.emulator)
         return bhr_data
