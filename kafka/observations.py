@@ -45,6 +45,8 @@ import datetime
 from collections import namedtuple
 import cPickle
 
+os.environ['HDF5_DISABLE_VERSION_CHECK'] = '1'
+
 import numpy as np
 import gdal
 from scipy.ndimage import zoom
@@ -211,7 +213,7 @@ def SynergyKernels(object):
 
 
 
-class BHRObservations(BRDF_descriptors):
+class BHRObservations(RetrieveBRDFDescriptors):
     def __init__ (self, emulator, tile, mcd43a1_dir, start_time, end_time=None, 
             mcd43a2_dir=None):
         """The class needs to locate the data granules. We assume that
@@ -225,9 +227,13 @@ class BHRObservations(BRDF_descriptors):
         latest granule found."""
         
         # Call the constructor first
-         super().__init__(tile, mcd43a1_dir, start_time, end_time, 
-                          mcd43a2_dir)
-         
+        # Python2
+        RetrieveBRDFDescriptors.__init__(self, tile,
+                mcd43a1_dir, start_time, end_time, mcd43a2_dir)
+        # Python3
+        #super().__init__(tile, mcd43a1_dir, start_time, end_time, 
+        #                  mcd43a2_dir)
+        self._get_emulator(emulator) 
     def _get_emulator(self, emulator):
         if not os.path.exists(emulator):
             raise IOError("The emulator {} doesn't exist!".format(emulator))
@@ -237,7 +243,7 @@ class BHRObservations(BRDF_descriptors):
     def get_band_data(self, the_date, band_no):
         
         to_BHR = np.array([1.0, 0.189184, -1.377622])
-        retval = self.get_brdf_descriptors(band_no, date)
+        retval = self.get_brdf_descriptors(band_no, the_date)
         if retval is None: # No data on this date
             return None
         kernels, mask, qa_level = retval
@@ -250,3 +256,11 @@ class BHRObservations(BRDF_descriptors):
         
         bhr_data = BHR_data(bhr, mask, R_mat, None, self.emulator)
         return bhr_data
+    
+if __name__ == "__main__":
+    emulator = "../SAIL_emulator_both_500trainingsamples.pkl"
+    tile = "h17v05"
+    start_time = "2017001"
+    mcd43a1_dir="/storage/ucfajlg/Ujia/MCD43/"
+    bhr_data =  BHRObservations(emulator, tile, mcd43a1_dir, start_time, end_time=None, mcd43a2_dir=None)
+    b=bhr_data.get_band_data(datetime.datetime(2017,1,1), 1)
