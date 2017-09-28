@@ -25,7 +25,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from utils import  matrix_squeeze, spsolve2, reconstruct_array
-from solvers import linear_diagonal_solver
+from solvers import variational_kalman
 
 # Set up logging
 import logging
@@ -51,16 +51,16 @@ def create_uncertainty(uncertainty, mask):
     R_mat = np.ones (good_obs)*uncertainty*uncertainty
     return sp.dia_matrix((R_mat, 0), shape=(R_mat.shape[0], R_mat.shape[0]))
 
-def create_linear_observation_operator (obs_op, n_params, metadata, x_forecast,
-                                        band=None):
+def create_linear_observation_operator (obs_op, n_params, metadata, 
+                                        mask, x_forecast, band=None):
     """A simple **identity** observation opeartor. It is expected that you
     subclass and redefine things...."""
-    good_obs = metadata.mask.sum() # size of H_matrix
+    good_obs = mask.sum() # size of H_matrix
     H_matrix = sp.dia_matrix(np.eye (good_obs))
     return H_matrix
 
 def create_nonlinear_observation_operator(n_params, emulator, metadata,
-                                          x_forecast, band):
+                                          mask, x_forecast, band):
     """Using an emulator of the nonlinear model around `x_forecast`.
     This case is quite special, as I'm focusing on a BHR SAIL
     version (or the JRC TIP), which have spectral parameters
@@ -69,7 +69,7 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     of the state vector (and model Jacobian) are used."""
     LOG.info("Creating the ObsOp for band %d" % band)
     n_times = x_forecast.shape[0] / n_params
-    good_obs = metadata.mask.sum()
+    good_obs = mask.sum()
 
     H_matrix = sp.lil_matrix((n_times, n_params * n_times),
                              dtype=np.float32)
@@ -86,14 +86,14 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
 
     x0 = np.zeros((n_times, 4))
     for i in xrange(n_times):
-        if metadata.mask.ravel()[i]:
+        if mask.ravel()[i]:
             x0[i, :] = x_forecast[state_mapper + n_params * i]
     LOG.info("Running emulators")
-    H0_, dH = emulator.predict(x0[metadata.mask.ravel()], do_unc=False)
+    H0_, dH = emulator.predict(x0[mask.ravel()], do_unc=False)
     n = 0
     LOG.info("Storing emulators in H matrix")
     for i in xrange(n_times):
-        if metadata.mask.ravel()[i]:
+        if mask.ravel()[i]:
             H_matrix[i, state_mapper + n_params * i] = dH[n]
             H0[i] = H0_[n]
             n += 1
@@ -106,7 +106,7 @@ class LinearKalman (object):
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
     def __init__(self, observations, output_array, output_unc,
-                 n_params=1, diagnostics=True, bands_per_observation=1):
+                 linear=True, n_params=1, diagnostics=True, bands_per_observation=1):
         """The class creator takes a list of observations, some metadata and a
         pointer to an output array."""
         self.n_params = n_params
@@ -115,7 +115,10 @@ class LinearKalman (object):
         self.output_unc = output_unc
         self.diagnostics = diagnostics
         self.bands_per_observation = bands_per_observation
-        self._create_observation_operator = create_observation_operator
+        if linear:
+            self._create_observation_operator = create_linear_observation_operator
+        else:
+            self._create_observation_operator = create_nonlinear_observation_operator
         
     def _set_plot_view (self, diag_string, timestep, obs):
         """This sets out the plot view for each iteration. Please override this
@@ -242,7 +245,7 @@ class LinearKalman (object):
         as relevant metadata
         """
         data = self.observations.get_band_data(timestep, band)
-        return (data.observations, data.R_mat, data.mask.ravel(), 
+        return (data.observations, data.uncertainty, data.mask, 
                 data.metadata, data.emulator)
 
     def run(self, time_grid, x_forecast, P_forecast, P_forecast_inverse,
@@ -263,10 +266,12 @@ class LinearKalman (object):
             locate_times = [i for i, x in enumerate(self.observations.dates)
                         if x == timestep]
             self.current_timestep = timestep
-            LOG.info("timestep %d" % timestep)
+            temp_times = [ self.observations.dates[k] for k in locate_times]
+            locate_times = temp_times
+            LOG.info("timestep %s" % timestep.strftime("%Y-%m-%d"))
             
             if not is_first:
-                LOG.info("Advancing state, timestep %d" % timestep)
+                LOG.info("Advancing state, %s" % timestep.strftime("%Y-%m-%d"))
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
                     x_analysis, P_analysis, P_analysis_inverse)
             is_first = False
@@ -300,7 +305,7 @@ class LinearKalman (object):
         a prior a multivariate Gaussian distribution with mean `x_forecast` and
         variance `P_forecast`."""
         for step in locate_times:
-            LOG.info("Assimilating %d..." % step)
+            LOG.info("Assimilating %s..." % step.strftime("%Y-%m-%d"))
             # This first loop iterates the solution for all bands
             # We store the forecast to compare convergence after one 
             # iteration
@@ -339,12 +344,12 @@ class LinearKalman (object):
                         # Remember that x_prev is the value that the iteration
                         # is working on. Starts with x_forecast, but updated
                         H_matrix = self._create_observation_operator(
-                            self.n_params, the_emulator, the_metadata, x_prev,
-                            None)
+                            self.n_params, the_emulator, the_metadata, 
+                            mask, x_prev, None)
                     else:
                         H_matrix = self._create_observation_operator(
-                            self.n_params, the_emulator, the_metadata, x_prev,
-                            band)
+                            self.n_params, the_emulator, the_metadata, 
+                            mask, x_prev, band)
                     # the mother of all function calls
                     x_analysis, P_analysis, P_analysis_inverse, \
                         innovations_prime  = self.solver(
@@ -387,6 +392,7 @@ class LinearKalman (object):
                     break
             if is_robust and converged:
                 # TODO update mask using innovations
+                pass
             
         if self.diagnostics:
             LOG.info("Plotting")
@@ -401,14 +407,13 @@ class LinearKalman (object):
 
         return x_analysis, P_analysis, P_analysis_inverse
 
+
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
-                P_forecast_inverse, R_mat, the_metadata):
-
-        x_analysis, P_analysis, P_analysis_inverse, innovations_prime = \
-            linear_diagonal_solver (
-                observations, mask, H_matrix, self.n_params, x_forecast,
-                P_forecast, R_mat, the_metadata)
-
-        return x_analysis, P_analysis, P_analysis_inverse, innovations_prime
-
-
+                P_forecast_inv, R_mat, the_metadata):
+        
+        x_analysis, P_analysis, P_analysis_inv, innovations_prime = \
+            variational_kalman (
+            observations, mask, R_mat, H_matrix, self.n_params, x_forecast,
+            P_forecast, P_forecast_inv, the_metadata)
+        
+        return x_analysis, P_analysis, P_analysis_inv, innovations_prime
