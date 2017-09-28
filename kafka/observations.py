@@ -50,6 +50,7 @@ os.environ['HDF5_DISABLE_VERSION_CHECK'] = '1'
 import numpy as np
 import gdal
 from scipy.ndimage import zoom
+import scipy.sparse as sp
 
 from kernels import Kernels
 from BRDF_descriptors import RetrieveBRDFDescriptors
@@ -66,7 +67,7 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 MOD09_data = namedtuple ("MOD09_data", 
                          "reflectance mask uncertainty obs_op sza vza raa")
 BHR_data = namedtuple("BHR_data",
-                        "albedo mask uncertainty metadata emulator")
+                      "observations mask uncertainty metadata emulator")
 
 def get_modis_dates (fnames):
     """Extract MODIS dates from filenames"""
@@ -214,7 +215,8 @@ def SynergyKernels(object):
 
 
 class BHRObservations(RetrieveBRDFDescriptors):
-    def __init__ (self, emulator, tile, mcd43a1_dir, start_time, end_time=None, 
+    def __init__ (self, emulator, tile, mcd43a1_dir, start_time, 
+            ulx=0, uly=0, dx=2400, dy=2400, end_time=None, 
             mcd43a2_dir=None):
         """The class needs to locate the data granules. We assume that
         these are available somewhere in the filesystem and that we can
@@ -235,7 +237,12 @@ class BHRObservations(RetrieveBRDFDescriptors):
         #                  mcd43a2_dir)
         self._get_emulator(emulator) 
         self.dates = sorted(self.a1_granules.keys())
-        
+        self.band_transfer = {0: "vis",
+                              1: "nir"}
+        self.ulx = ulx
+        self.uly = uly
+        self.dx = dx
+        self.dy = dy
         
     def _get_emulator(self, emulator):
         if not os.path.exists(emulator):
@@ -250,14 +257,26 @@ class BHRObservations(RetrieveBRDFDescriptors):
         if retval is None: # No data on this date
             return None
         kernels, mask, qa_level = retval
+        mask = mask[self.uly:(self.uly + self.dy),
+                    self.ulx:(self.ulx + self.dx)]
+        qa_level = qa_level[self.uly:(self.uly + self.dy),
+                    self.ulx:(self.ulx + self.dx)]
+        kernels = kernels [:, self.uly:(self.uly + self.dy),
+                    self.ulx:(self.ulx + self.dx)]
         bhr = np.where(mask,
                        kernels * to_BHR[:, None, None], np.nan).sum(axis=0)
         R_mat = np.zeros_like(bhr)
+        
         R_mat[qa_level == 0] = np.maximum(2.5e-3, bhr[qa_level == 0] * 0.05)
         R_mat[qa_level == 1] = np.maximum(2.5e-3, bhr[qa_level == 1] * 0.07)
         R_mat[np.logical_not(mask)] = 0.
+        N = mask.ravel().shape[0]
+        R_mat_sp = sp.lil_matrix((N, N))
+        R_mat_sp.setdiag(1./(R_mat.ravel())**2)
+        R_mat_sp = R_mat_sp.tocsr()
+
         
-        bhr_data = BHR_data(bhr, mask, R_mat, None, self.emulator)
+        bhr_data = BHR_data(bhr, mask, R_mat_sp, None, self.emulator)
         return bhr_data
     
 if __name__ == "__main__":
