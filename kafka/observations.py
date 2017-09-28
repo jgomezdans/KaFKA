@@ -234,6 +234,9 @@ class BHRObservations(RetrieveBRDFDescriptors):
         #super().__init__(tile, mcd43a1_dir, start_time, end_time, 
         #                  mcd43a2_dir)
         self._get_emulator(emulator) 
+        self.dates = sorted(self.a1_granules.keys())
+        
+        
     def _get_emulator(self, emulator):
         if not os.path.exists(emulator):
             raise IOError("The emulator {} doesn't exist!".format(emulator))
