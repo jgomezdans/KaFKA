@@ -244,6 +244,18 @@ class BHRObservations(RetrieveBRDFDescriptors):
         self.dx = dx
         self.dy = dy
         
+    def define_output(self):
+        reference_fname = self.a1_granules[self.dates[0]]
+        g = gdal.Open('HDF4_EOS:EOS_GRID:' + \
+            '"%s":MOD_Grid_BRDF:BRDF_Albedo_Parameters_vis' % reference_fname)
+        proj = g.GetProjection()
+        geoT = np.array(g.GetGeoTransform())
+        new_geoT = geoT*1.
+        new_geoT[0] = new_geoT[0] + self.dx*new_geoT[1]
+        new_geoT[3] = new_geoT[3] + self.dy*new_geoT[5]
+        return proj, new_geoT.tolist()
+        
+        
     def _get_emulator(self, emulator):
         if not os.path.exists(emulator):
             raise IOError("The emulator {} doesn't exist!".format(emulator))
@@ -278,6 +290,37 @@ class BHRObservations(RetrieveBRDFDescriptors):
         
         bhr_data = BHR_data(bhr, mask, R_mat_sp, None, self.emulator)
         return bhr_data
+    
+    
+class KafkaOutput(object):
+    """A very simple class to output the state."""
+    def __init__ (self, tilewidth, geotransform, projection, folder, 
+                  fmt="GTiff"):
+        """The inference engine works on tiles, so we get the tilewidth
+        (we assume the tiles are square), the GDAL-friendly geotransform
+        and projection, as well as the destination directory and the
+        format (as a string that GDAL can understand)."""
+        self.tilewidth = tilewidth
+        self.geotransform = geotransform
+        self.projection = projection
+        self.folder = folder
+        self.fmt = fmt
+    
+    def dump_data (self, timestep, x_analysis, P_analysis, P_analysis_inv):
+        drv = gdal.GetDriverByName(self.fmt)
+        for ii, param in enumerate(["w_vis", "x_vis", "a_vis",
+                   "w_nir", "x_nir", "a_nir",
+                   "TeLAI"]):
+            fname = os.path.join ( self.folder, "%s_%s.tif" % 
+                                  (param, timestep.strftime("A%Y%j")))
+            dst_ds = drv.Create(fname, self.tilewidth, self.tilewidth, 1,
+                    gdal.GDT_Float32, ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 
+                                       'PREDICTOR=1', 'TILED=YES'])
+            dst_ds.SetProjection(self.projection)
+            dst_ds.SetGeoTransform(self.geotransform)
+            dst_ds.GetRasterBand(1).WriteArray(x_analysis[ii::7].reshape((
+                self.tilewidth, self.tilewidth)))
+
     
 if __name__ == "__main__":
     emulator = "../SAIL_emulator_both_500trainingsamples.pkl"

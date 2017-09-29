@@ -83,7 +83,8 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     elif band == 1:
         # ssa, asym, TLAI, rsoil
         state_mapper = np.array([3, 4, 6, 5])
-
+        
+    # This loop can be JIT'ed
     x0 = np.zeros((n_times, 4))
     for i in xrange(n_times):
         if mask.ravel()[i]:
@@ -92,6 +93,7 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     H0_, dH = emulator.predict(x0[mask.ravel()], do_unc=False)
     n = 0
     LOG.info("Storing emulators in H matrix")
+    # This loop can be JIT'ed too
     for i in xrange(n_times):
         if mask.ravel()[i]:
             H_matrix[i, state_mapper + n_params * i] = dH[n]
@@ -105,14 +107,13 @@ class LinearKalman (object):
     """The main Kalman filter class operating in raster data sets. Note that the
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
-    def __init__(self, observations, output_array, output_unc,
+    def __init__(self, observations, output,
                  linear=True, n_params=1, diagnostics=True, bands_per_observation=1):
         """The class creator takes a list of observations, some metadata and a
         pointer to an output array."""
         self.n_params = n_params
         self.observations = observations
-        self.output = output_array
-        self.output_unc = output_unc
+        self.output = output
         self.diagnostics = diagnostics
         self.bands_per_observation = bands_per_observation
         if linear:
@@ -133,39 +134,6 @@ class LinearKalman (object):
         """We call this diagnostic method at the **END** of the iteration"""
         pass
 
-    def _dump_output(self, step, timestep, x_analysis, P_analysis,
-                     P_analysis_inverse):
-        """Store the output somewhere for further use. This method is called
-        after each time step, so if several observations are available within
-        the same timestep, it will be the combined result of all observations.
-        Currently, only outputting to numpy arrays...
-        Parameters
-        ----------
-        step: integer
-            The "band" in the output array
-        timestep: integer
-            The actual timestep (e.g. DoY or something like that)
-        x_analysis: array
-            The analysis state vector
-        P_analysis: array
-            The analysis state covariance
-        """
-        # Needs to take self.n_params into account
-        if self.n_params > 1:
-            N = self.output.shape[2] * self.output.shape[3]
-            for param in xrange(self.n_params):
-                self.output[step, param, :, :] = x_analysis[
-                                               (param * N):(
-                                               (param + 1) * N)].reshape(
-                    (self.output.shape[2:]))
-                self.output_unc[step, param, :, :] = P_analysis.diagonal()[
-                                                   (param * N):(
-                                                   (param + 1) * N)].reshape(
-                    (self.output.shape[2:]))
-        else:
-            self.output[step, :, :] = x_analysis.reshape((self.output.shape[1:]))
-            self.output_unc[step, :, :] = P_analysis.diagonal().reshape(
-                self.output.shape[1:])
 
     def set_trajectory_model(self, nx, ny):
         """In a Kalman filter, the state is progated from time `t` to `t+1`
@@ -210,7 +178,7 @@ class LinearKalman (object):
             # Main assumption here is that the "inflation" factor is
             # calculated using the main diagonal of M
             PQ_matrix = (np.ones(M.shape[0]) + (1./(M.diagonal())*
-                                                Q.diagonal()))
+                                    self.trajectory_uncertainty.diagonal()))
             # Update P_f = P_a^{-1}/(I+P_a^{-1}.diag + Q)
             P_forecast_inverse = M*sp.dia_matrix((PQ_matrix,0), 
                                                  shape=M.shape)
@@ -294,7 +262,7 @@ class LinearKalman (object):
                                      iter_obs_op=iter_obs_op,
                                      is_robust=is_robust, diag_str=diag_str)
 
-            self._dump_output(ii, timestep, x_analysis, P_analysis, 
+            self.output.dump_data(timestep, x_analysis, P_analysis, 
                               P_analysis_inverse)
 
     def assimilate(self, locate_times, x_forecast, P_forecast, 
@@ -312,6 +280,7 @@ class LinearKalman (object):
             x_prev = x_forecast*1.
             converged = False
             n_iter = 0
+            have_obs = True
             while True:
                 if n_iter == 0:
                     # Read in the data for all bands so we don't have 
@@ -326,7 +295,15 @@ class LinearKalman (object):
                                 = self._get_observations_timestep(step, band)
                         cached_obs.append ( (observations, R_mat, mask, 
                                            the_metadata, emulator) )
-                        
+                        print step, mask.sum()
+                    if mask.sum() == 0:
+                        # No observations!!
+                        LOG.info("No observations for band %d" % (band+1))
+                        have_obs = False
+                        x_analysis = x_forecast*1
+                        P_analysis = P_forecast 
+                        P_analysis_inverse = P_forecast_inverse
+                        break
                 n_iter += 1
                 for band in xrange(self.bands_per_observation):
                     LOG.info("Band %d" % band)
@@ -334,6 +311,7 @@ class LinearKalman (object):
                     # From cache
                     observations, R_mat, mask, the_metadata, the_emulator  = \
                         cached_obs[band]
+                    
                     if self.diagnostics:
                         LOG.info("Setting up diagnostics...")
                         plot_object = self._set_plot_view(diag_str, step, 
@@ -361,10 +339,12 @@ class LinearKalman (object):
                     P_forecast = P_analysis
                     P_forecast_inverse = P_analysis_inverse                    
 
+
                 if iter_obs_op:
                     # this should be an option...
                     maska = np.concatenate([mask.ravel() 
                                             for i in xrange(self.n_params)]) 
+                        
                     convergence_norm = np.linalg.norm(x_analysis[maska] - 
                                             x_prev[maska])/float(maska.sum())
                     if convergence_norm <= 5e-4:
@@ -394,9 +374,9 @@ class LinearKalman (object):
                 # TODO update mask using innovations
                 pass
             
-        if self.diagnostics:
-            LOG.info("Plotting")
-            self._plotter_iteration_end(plot_object, x_analysis,
+            if self.diagnostics and have_obs:
+                LOG.info("Plotting")
+                self._plotter_iteration_end(plot_object, x_analysis,
                                         P_analysis, innovations_prime, mask)
 
         # Store the current state as previous state
