@@ -23,6 +23,8 @@ implementation basically performs a very fast update of the filter."""
 from collections import namedtuple
 import numpy as np
 import scipy.sparse as sp
+#from scipy.spatial.distance import squareform, pdist
+import sklearn.cluster
 
 from utils import  matrix_squeeze, spsolve2, reconstruct_array
 from solvers import variational_kalman
@@ -41,6 +43,51 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 Metadata = namedtuple('Metadata', 'mask uncertainty')
 Previous_State = namedtuple("Previous_State", 
                             "timestamp x_vect cov_m icov_mv")
+
+def run_emulator (gp, x, tol=None):
+    # We select the unique values in vector x
+    # Note that we could have done this using e.g. a histogram
+    # or some other method to select solutions "close enough"
+    unique_vectors = np.vstack({tuple(row) for row in x})
+    if len(unique_vectors) > 5e9:
+        LOG.info("Clustering parameter space")
+        k_means = sklearn.cluster.KMeans(250)
+        k_means.fit(x) 
+        unique_vectors = k_means.cluster_centers_
+        labels = k_means.labels_
+        
+        #unique_vectors, clusters = scipy.cluster.vq.kmeans2( x, 500)
+
+    ###def unique_rows(arr, thresh=0.0, metric='euclidean'):
+        ###"Returns subset of rows that are unique, in terms of Euclidean distance"
+        ###distances = squareform(pdist(arr, metric=metric))
+        ###idxset = {tuple(np.nonzero(v)[0]) for v in distances <= thresh}
+        ###return arr[[xx[0] for xx in idxset]]
+    
+    ###unique_vectors = unique_rows (x, thresh=0.1)
+    
+    # Runs emulator for emulation subset
+    try:
+        H_, dH_ = gp.predict( unique_vectors, do_unc=False)
+    except ValueError:
+        # Needed for newer gp version
+        H_, _, dH_ = gp.predict( unique_vectors, do_unc=False)
+    
+    H = np.zeros(x.shape[0])
+    dH = np.zeros_like(x)
+    try:
+        nclust = labels.shape
+    except NameError:
+        for i, uniq in enumerate(unique_vectors):
+            passer = np.all ( x == uniq, axis=1)
+            H[passer] = H_[i]
+            dH[passer, :] = dH_[i, :]
+        return H, dH
+    
+    for label in np.unique(labels):
+        H[labels==label] = H_[label]
+        dH[labels==label, :] = dH_[label, :]
+    return H, dH
 
 def create_uncertainty(uncertainty, mask):
     """Creates the observational uncertainty matrix. We assume that
@@ -90,7 +137,9 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
         if mask.ravel()[i]:
             x0[i, :] = x_forecast[state_mapper + n_params * i]
     LOG.info("Running emulators")
-    H0_, dH = emulator.predict(x0[mask.ravel()], do_unc=False)
+    # Calls the run_emulator method that only does different vectors
+    # It might be here that we do some sort of clustering
+    H0_, dH = run_emulator(emulator, x0[mask.ravel()])
     n = 0
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too
