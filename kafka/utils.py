@@ -37,6 +37,18 @@ import gdal
 import logging
 LOG = logging.getLogger(__name__)
 
+def locate_in_lut(lut, im):
+    """This function locates a samples nearest neighbour in another dataset.
+    We assume that `lut` is `[m, np]` and `im` is `[n, np]`, where `n >> m`
+    and `np` is not too big. We will look for the location of the row of
+    `lut` that is closest to each row in `im`.
+    It returns `idx`, an array with an integer index to the first dimension 
+    of lut."""
+    assert ( lut.shape[1] == im.shape[1] )
+    idx = np.linalg.norm ( lut[:, None, :] - im, axis=2).argmin(axis=0)
+    return idx 
+
+
 # This is a faster version for equally-sized blocks. 
 #Currently, open PR on scipy's github
 # (https://github.com/scipy/scipy/pull/5619)
