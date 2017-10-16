@@ -24,9 +24,10 @@ from collections import namedtuple
 import numpy as np
 import scipy.sparse as sp
 #from scipy.spatial.distance import squareform, pdist
-import sklearn.cluster
+
 
 from utils import  matrix_squeeze, spsolve2, reconstruct_array
+from utils import locate_in_lut
 from solvers import variational_kalman
 
 # Set up logging
@@ -49,23 +50,18 @@ def run_emulator (gp, x, tol=None):
     # Note that we could have done this using e.g. a histogram
     # or some other method to select solutions "close enough"
     unique_vectors = np.vstack({tuple(row) for row in x})
-    if len(unique_vectors) > 5e9:
-        LOG.info("Clustering parameter space")
-        k_means = sklearn.cluster.KMeans(250)
-        k_means.fit(x) 
-        unique_vectors = k_means.cluster_centers_
-        labels = k_means.labels_
+    if len(unique_vectors) == 1: # Prior!
+        cluster_labels = np.zeros(x.shape[0], dtype=np.int16)
+    elif len(unique_vectors) > 5e3:
         
-        #unique_vectors, clusters = scipy.cluster.vq.kmeans2( x, 500)
-
-    ###def unique_rows(arr, thresh=0.0, metric='euclidean'):
-        ###"Returns subset of rows that are unique, in terms of Euclidean distance"
-        ###distances = squareform(pdist(arr, metric=metric))
-        ###idxset = {tuple(np.nonzero(v)[0]) for v in distances <= thresh}
-        ###return arr[[xx[0] for xx in idxset]]
-    
-    ###unique_vectors = unique_rows (x, thresh=0.1)
-    
+        LOG.info("Clustering parameter space")
+        mean = np.mean(x, axis=0) # 7 dimensions
+        cov = np.cov(x, rowvar=0) # 7 x 7 dimensions
+        # Draw a 300 element LUT
+        unique_vectors = np.random.multivariate_normal( mean, cov, 
+                                                       1500)
+        # Assign each element of x to a LUT/cluster entry
+        cluster_labels = locate_in_lut(unique_vectors, x)
     # Runs emulator for emulation subset
     try:
         H_, dH_ = gp.predict( unique_vectors, do_unc=False)
@@ -76,7 +72,7 @@ def run_emulator (gp, x, tol=None):
     H = np.zeros(x.shape[0])
     dH = np.zeros_like(x)
     try:
-        nclust = labels.shape
+        nclust = cluster_labels.shape
     except NameError:
         for i, uniq in enumerate(unique_vectors):
             passer = np.all ( x == uniq, axis=1)
@@ -84,9 +80,9 @@ def run_emulator (gp, x, tol=None):
             dH[passer, :] = dH_[i, :]
         return H, dH
     
-    for label in np.unique(labels):
-        H[labels==label] = H_[label]
-        dH[labels==label, :] = dH_[label, :]
+    for label in np.unique(cluster_labels):
+        H[cluster_labels==label] = H_[label]
+        dH[cluster_labels==label, :] = dH_[label, :]
     return H, dH
 
 def create_uncertainty(uncertainty, mask):
