@@ -237,6 +237,14 @@ class BHRObservations(RetrieveBRDFDescriptors):
         #                  mcd43a2_dir)
         self._get_emulator(emulator) 
         self.dates = sorted(self.a1_granules.keys())
+        self.dates = self.dates[::8]
+        a1_temp = {}
+        a2_temp = {}
+        for k in self.dates:
+            a1_temp[k] = self.a1_granules[k]
+            a2_temp[k] = self.a2_granules[k]
+        self.a1_granules = a1_temp
+        self.a2_granules = a2_temp
         self.band_transfer = {0: "vis",
                               1: "nir"}
         self.ulx = ulx
@@ -251,8 +259,8 @@ class BHRObservations(RetrieveBRDFDescriptors):
         proj = g.GetProjection()
         geoT = np.array(g.GetGeoTransform())
         new_geoT = geoT*1.
-        new_geoT[0] = new_geoT[0] + self.dx*new_geoT[1]
-        new_geoT[3] = new_geoT[3] + self.dy*new_geoT[5]
+        new_geoT[0] = new_geoT[0] + self.ulx*new_geoT[1]
+        new_geoT[3] = new_geoT[3] + self.uly*new_geoT[5]
         return proj, new_geoT.tolist()
         
         
