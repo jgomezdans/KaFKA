@@ -24,6 +24,7 @@ from collections import namedtuple
 import numpy as np
 import scipy.sparse as sp
 #from scipy.spatial.distance import squareform, pdist
+from numba import jit
 
 
 from utils import  matrix_squeeze, spsolve2, reconstruct_array
@@ -52,14 +53,14 @@ def run_emulator (gp, x, tol=None):
     unique_vectors = np.vstack({tuple(row) for row in x})
     if len(unique_vectors) == 1: # Prior!
         cluster_labels = np.zeros(x.shape[0], dtype=np.int16)
-    elif len(unique_vectors) > 5e3:
+    elif len(unique_vectors) > 1e6:
         
         LOG.info("Clustering parameter space")
         mean = np.mean(x, axis=0) # 7 dimensions
-        cov = np.cov(x, rowvar=0) # 7 x 7 dimensions
+        cov = np.cov(x, rowvar=0) # 4 x 4 dimensions
         # Draw a 300 element LUT
         unique_vectors = np.random.multivariate_normal( mean, cov, 
-                                                       1500)
+                                                       5000)
         # Assign each element of x to a LUT/cluster entry
         cluster_labels = locate_in_lut(unique_vectors, x)
     # Runs emulator for emulation subset
@@ -136,9 +137,38 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     # Calls the run_emulator method that only does different vectors
     # It might be here that we do some sort of clustering
     H0_, dH = run_emulator(emulator, x0[mask.ravel()])
-    n = 0
+    
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too
+    ########@jit
+    #######def fast_assign(n_times, mask, state_mapper, n_params, dH,  H0_):
+        
+        #######H0 = np.zeros(n_times, dtype=np.float32)
+        #######n_good = mask.sum()
+        #######rows = np.zeros(n_good, dtype=np.int64)
+        #######cols = np.zeros(n_good, dtype=np.int64)
+        #######values = np.zeros(n_good, dtype=np.float32)
+        #######n = 0
+        #######m = 0
+        #######for i in xrange(n_times):
+            #######if mask.ravel()[i]:
+                #######for jj,s in enumerate(state_mapper):
+                    #######rows[m] = i
+                    #######cols[m] = s + n_params*i
+                    #######values[m] = dH[n, jj]
+                    #######m += 1
+                ########rows.append( i)
+                ########cols.append(state_mapper + n_params * i)
+                ########values.append(dH[n])
+                ########H_matrix[i, state_mapper + n_params * i] = dH[n]
+                #######H0[i] = H0_[n]
+                #######n += 1
+                #######return H0, rows, cols, values
+    #######H0, rows, cols, values = fast_assign(n_times, mask, 
+                    #######state_mapper, n_params, dH,  H0_)
+    #######H_matrix = sp.coo_matrix ( (values, rows, cols), 
+                              #######shape=[n_times, n_params * n_times]).tolil()
+    n = 0
     for i in xrange(n_times):
         if mask.ravel()[i]:
             H_matrix[i, state_mapper + n_params * i] = dH[n]
@@ -340,7 +370,7 @@ class LinearKalman (object):
                                 = self._get_observations_timestep(step, band)
                         cached_obs.append ( (observations, R_mat, mask, 
                                            the_metadata, emulator) )
-                        print step, mask.sum()
+                        
                     if mask.sum() == 0:
                         # No observations!!
                         LOG.info("No observations for band %d" % (band+1))
@@ -442,3 +472,4 @@ class LinearKalman (object):
             P_forecast, P_forecast_inv, the_metadata)
         
         return x_analysis, P_analysis, P_analysis_inv, innovations_prime
+
