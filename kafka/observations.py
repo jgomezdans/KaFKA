@@ -302,32 +302,35 @@ class BHRObservations(RetrieveBRDFDescriptors):
     
 class KafkaOutput(object):
     """A very simple class to output the state."""
-    def __init__ (self, tilewidth, geotransform, projection, folder, 
+    def __init__ (self, mask, geotransform, projection, folder, 
                   fmt="GTiff"):
         """The inference engine works on tiles, so we get the tilewidth
         (we assume the tiles are square), the GDAL-friendly geotransform
         and projection, as well as the destination directory and the
         format (as a string that GDAL can understand)."""
-        self.tilewidth = tilewidth
+        self.mask = mask
         self.geotransform = geotransform
         self.projection = projection
         self.folder = folder
         self.fmt = fmt
     
-    def dump_data (self, timestep, x_analysis, P_analysis, P_analysis_inv):
+    def dump_data (self, timestep, x_analysis, P_analysis,
+                   P_analysis_inv):
         drv = gdal.GetDriverByName(self.fmt)
+        ny, nx = self.mask.shape
         for ii, param in enumerate(["w_vis", "x_vis", "a_vis",
                    "w_nir", "x_nir", "a_nir",
                    "TeLAI"]):
             fname = os.path.join ( self.folder, "%s_%s.tif" % 
                                   (param, timestep.strftime("A%Y%j")))
-            dst_ds = drv.Create(fname, self.tilewidth, self.tilewidth, 1,
+            dst_ds = drv.Create(fname, nx, ny, 1,
                     gdal.GDT_Float32, ['COMPRESS=DEFLATE', 'BIGTIFF=YES', 
                                        'PREDICTOR=1', 'TILED=YES'])
             dst_ds.SetProjection(self.projection)
             dst_ds.SetGeoTransform(self.geotransform)
-            dst_ds.GetRasterBand(1).WriteArray(x_analysis[ii::7].reshape((
-                self.tilewidth, self.tilewidth)))
+            x = np.zeros_like(self.mask)
+            x[self.mask] = x_analysis[ii::7]
+            dst_ds.GetRasterBand(1).WriteArray(x)
 
     
 if __name__ == "__main__":
