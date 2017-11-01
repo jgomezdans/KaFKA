@@ -275,12 +275,14 @@ class LinearKalman (object):
         The time_grid ought to be a list with the time steps given in the same
         form as self.observation_times"""
         is_first = True
-
-        for ii,timestep in enumerate(time_grid):
+        istart_date = time_grid[0] # First temporal grid date
+        for ii, timestep in enumarate(time_grid[1:]):
             # First locate all available observations for time step of interest.
             # Note that there could be more than one...
-            locate_times = [i for i, x in enumerate(self.observations.dates)
-                        if x == timestep]
+            locate_times_idx = np.where(np.logical_and(
+                self.observations.dates >= istart_doy,
+                self.observations.dates < timestep, True, False)
+            locate_times = self.observation_dates[locate_times_idx]
             self.current_timestep = timestep
             temp_times = [ self.observations.dates[k] for k in locate_times]
             locate_times = temp_times
