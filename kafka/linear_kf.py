@@ -222,14 +222,13 @@ class LinearKalman (object):
                                    # Terejanu's notation
             # Main assumption here is that the "inflation" factor is
             # calculated using the main diagonal of M
-            PQ_matrix = (np.ones(M.shape[0]) + (1./(M.diagonal())*
+            PQ_matrix = 1./(np.ones(M.shape[0]) + ((M.diagonal())*
                                     self.trajectory_uncertainty.diagonal()))
             # Update P_f = P_a^{-1}/(I+P_a^{-1}.diag + Q)
-            P_forecast_inverse = M*sp.dia_matrix((PQ_matrix,0), 
-                                                 shape=M.shape)
+            P_forecast_inverse = M.dot(sp.dia_matrix((PQ_matrix,0), 
+                                                 shape=M.shape))
             
             P_forecast = None
-            
         else:
             trajectory_uncertainty = sp.dia_matrix((self.trajectory_uncertainty,
                                                     0), shape=P_analysis.shape)
