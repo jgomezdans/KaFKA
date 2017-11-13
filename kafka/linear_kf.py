@@ -196,11 +196,11 @@ class LinearKalman (object):
                                    # Terejanu's notation
             # Main assumption here is that the "inflation" factor is
             # calculated using the main diagonal of M
-            PQ_matrix = (np.ones(M.shape[0]) + (1./(M.diagonal())*
+            PQ_matrix = 1./(np.ones(M.shape[0]) + ((M.diagonal())*
                                                 Q.diagonal()))
             # Update P_f = P_a^{-1}/(I+P_a^{-1}.diag + Q)
-            P_forecast_inverse = M*sp.dia_matrix((PQ_matrix,0), 
-                                                 shape=M.shape)
+            P_forecast_inverse = M.dot(sp.dia_matrix((PQ_matrix,0), 
+                                                 shape=M.shape))
             
             P_forecast = None
             
