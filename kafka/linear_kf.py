@@ -20,8 +20,8 @@ implementation basically performs a very fast update of the filter."""
 # You should have received a copy of the GNU General Public License
 # along with KaFKA.  If not, see <http://www.gnu.org/licenses/>.
 
-from collections import namedtuple
 import logging
+from collections import namedtuple
 
 import numpy as np
 
@@ -89,22 +89,25 @@ def run_emulator(gp, x, tol=None):
         dH[cluster_labels == label, :] = dH_[label, :]
     return H, dH
 
+
 def create_uncertainty(uncertainty, mask):
     """Creates the observational uncertainty matrix. We assume that
     uncertainty is a single value and we return a diagonal matrix back.
     We present this diagonal **ONLY** for pixels that have observations
     (i.e. not masked)."""
     good_obs = mask.sum()
-    R_mat = np.ones (good_obs)*uncertainty*uncertainty
+    R_mat = np.ones(good_obs)*uncertainty*uncertainty
     return sp.dia_matrix((R_mat, 0), shape=(R_mat.shape[0], R_mat.shape[0]))
 
-def create_linear_observation_operator (obs_op, n_params, metadata,
-                                        mask, x_forecast, band=None):
+
+def create_linear_observation_operator(obs_op, n_params, metadata,
+                                       mask, x_forecast, band=None):
     """A simple **identity** observation opeartor. It is expected that you
     subclass and redefine things...."""
-    good_obs = mask.sum() # size of H_matrix
-    H_matrix = sp.dia_matrix(np.eye (good_obs))
+    good_obs = mask.sum()  # size of H_matrix
+    H_matrix = sp.dia_matrix(np.eye(good_obs))
     return H_matrix
+
 
 def create_nonlinear_observation_operator(n_params, emulator, metadata,
                                           mask, x_forecast, band):
@@ -152,12 +155,14 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
 
     return (H0, H_matrix.tocsr())
 
+
 class LinearKalman (object):
     """The main Kalman filter class operating in raster data sets. Note that the
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
     def __init__(self, observations, output,
-                 linear=True, n_params=1, diagnostics=True, bands_per_observation=1):
+                 linear=True, n_params=1, diagnostics=True,
+                 bands_per_observation=1):
         """The class creator takes a list of observations, some metadata and a
         pointer to an output array."""
         self.n_params = n_params
@@ -166,23 +171,24 @@ class LinearKalman (object):
         self.diagnostics = diagnostics
         self.bands_per_observation = bands_per_observation
         if linear:
-            self._create_observation_operator = create_linear_observation_operator
+            self._create_observation_operator = \
+                                            create_linear_observation_operator
         else:
-            self._create_observation_operator = create_nonlinear_observation_operator
+            self._create_observation_operator = \
+                                        create_nonlinear_observation_operator
 
-    def _set_plot_view (self, diag_string, timestep, obs):
+    def _set_plot_view(self, diag_string, timestep, obs):
         """This sets out the plot view for each iteration. Please override this
         method with whatever you want."""
         pass
 
-    def _plotter_iteration_start (self, plot_obj, x, obs, mask):
+    def _plotter_iteration_start(self, plot_obj, x, obs, mask):
         """We call this diagnostic method at the **START** of the iteration"""
         pass
 
-    def _plotter_iteration_end (self, plot_obj, x, P, innovation, mask):
+    def _plotter_iteration_end(self, plot_obj, x, P, innovation, mask):
         """We call this diagnostic method at the **END** of the iteration"""
         pass
-
 
     def set_trajectory_model(self, nx, ny):
         """In a Kalman filter, the state is progated from time `t` to `t+1`
@@ -195,8 +201,9 @@ class LinearKalman (object):
     def set_trajectory_uncertainty(self, Q, nx, ny):
         """In a Kalman filter, the model that propagates the state from time
         `t` to `t+1` is assumed to be *wrong*, and this is indicated by having
-        additive Gaussian noise, which we assume is zero-mean, and controlled by
-        a covariance matrix `Q`. Here, you can provide the main diagonal of `Q`.
+        additive Gaussian noise, which we assume is zero-mean, and controlled
+        by a covariance matrix `Q`. Here, you can provide the main diagonal of
+         `Q`.
 
         Parameters
         -----------
@@ -205,9 +212,8 @@ class LinearKalman (object):
         """
         n = nx*ny
         self.trajectory_uncertainty = sp.eye(self.n_params*n, self.n_params*n,
-                                       format="csr")
+                                             format="csr")
         self.trajectory_uncertainty.setdiag(Q)
-
 
     def advance(self, x_analysis, P_analysis, P_analysis_inverse):
         """Advance the state. If we have to update the state
@@ -221,21 +227,21 @@ class LinearKalman (object):
         elif sp.issparse(self.trajectory_uncertainty) and P_analysis is None:
             LOG.info("Updating prior *inverse covariance*")
             # These is an approximation to the information filter equations
-            #(see e.g. Terejanu's notes)
-            M = P_analysis_inverse # for convenience and to stay with
-                                   # Terejanu's notation
+            # (see e.g. Terejanu's notes)
+            M = P_analysis_inverse   # for convenience and to stay with
+            #  Terejanu's notation
             # Main assumption here is that the "inflation" factor is
             # calculated using the main diagonal of M
-            PQ_matrix = 1./(np.ones(M.shape[0]) + ((M.diagonal())*
-                                    self.trajectory_uncertainty.diagonal()))
+            PQ_matrix = 1./(np.ones(M.shape[0]) + ((
+                M.diagonal()) * self.trajectory_uncertainty.diagonal()))
             # Update P_f = P_a^{-1}/(I+P_a^{-1}.diag + Q)
-            P_forecast_inverse = M.dot(sp.dia_matrix((PQ_matrix,0),
-                                                 shape=M.shape))
+            P_forecast_inverse = M.dot(sp.dia_matrix((PQ_matrix, 0),
+                                                     shape=M.shape))
 
             P_forecast = None
         else:
-            trajectory_uncertainty = sp.dia_matrix((self.trajectory_uncertainty,
-                                                    0), shape=P_analysis.shape)
+            trajectory_uncertainty = sp.dia_matrix((
+                self.trajectory_uncertainty, 0), shape=P_analysis.shape)
             P_forecast = P_analysis + trajectory_uncertainty
             P_forecast_inverse = None
 
@@ -265,9 +271,9 @@ class LinearKalman (object):
                 data.metadata, data.emulator)
 
     def run(self, time_grid, x_forecast, P_forecast, P_forecast_inverse,
-                   diag_str="diagnostics",
-                   band=None, approx_diagonal=True, refine_diag=True,
-                   iter_obs_op=False, is_robust=False, dates=None):
+            diag_str="diagnostics",
+            band=None, approx_diagonal=True, refine_diag=True,
+            iter_obs_op=False, is_robust=False, dates=None):
         """Runs a complete assimilation run. Requires a temporal grid (where
         we store the timesteps where the inferences will be done, and starting
         values for the state and covariance (or inverse covariance) matrices.
@@ -276,13 +282,14 @@ class LinearKalman (object):
         form as self.observation_times"""
         is_first = True
 
-        for ii,timestep in enumerate(time_grid):
-            # First locate all available observations for time step of interest.
+        for ii, timestep in enumerate(time_grid):
+            # First locate all available observations for time step of
+            # interest.
             # Note that there could be more than one...
             locate_times = [i for i, x in enumerate(self.observations.dates)
-                        if x == timestep]
+                            if x == timestep]
             self.current_timestep = timestep
-            temp_times = [ self.observations.dates[k] for k in locate_times]
+            temp_times = [self.observations.dates[k] for k in locate_times]
             locate_times = temp_times
             LOG.info("timestep %s" % timestep.strftime("%Y-%m-%d"))
 
@@ -302,7 +309,7 @@ class LinearKalman (object):
                 # We do have data, so we assimilate
                 LOG.info("# of Observations: %d" % len(locate_times))
 
-                x_analysis, P_analysis, P_analysis_inverse = self.assimilate (
+                x_analysis, P_analysis, P_analysis_inverse = self.assimilate(
                                      locate_times, x_forecast, P_forecast,
                                      P_forecast_inverse,
                                      approx_diagonal=approx_diagonal,
@@ -311,7 +318,7 @@ class LinearKalman (object):
                                      is_robust=is_robust, diag_str=diag_str)
 
             self.output.dump_data(timestep, x_analysis, P_analysis,
-                              P_analysis_inverse)
+                                  P_analysis_inverse)
 
     def assimilate(self, locate_times, x_forecast, P_forecast,
                    P_forecast_inverse,
@@ -341,9 +348,8 @@ class LinearKalman (object):
                         else:
                             observations, R_mat, mask, the_metadata, emulator \
                                 = self._get_observations_timestep(step, band)
-                        cached_obs.append ( (observations, R_mat, mask,
-                                           the_metadata, emulator) )
-                        print step, mask.sum()
+                        cached_obs.append((observations, R_mat, mask,
+                                           the_metadata, emulator))
                     if mask.sum() == 0:
                         # No observations!!
                         LOG.info("No observations for band %d" % (band+1))
@@ -357,7 +363,7 @@ class LinearKalman (object):
                     LOG.info("Band %d" % band)
                     # Extract obs, mask and uncertainty for current time
                     # From cache
-                    observations, R_mat, mask, the_metadata, the_emulator  = \
+                    observations, R_mat, mask, the_metadata, the_emulator = \
                         cached_obs[band]
 
                     if self.diagnostics:
@@ -365,7 +371,7 @@ class LinearKalman (object):
                         plot_object = self._set_plot_view(diag_str, step,
                                                           observations)
                         self._plotter_iteration_start(plot_object, x_forecast,
-                                                      observations, mask )
+                                                      observations, mask)
                     if self.bands_per_observation == 1:
                         # Remember that x_prev is the value that the iteration
                         # is working on. Starts with x_forecast, but updated
@@ -378,7 +384,7 @@ class LinearKalman (object):
                             mask, x_prev, band)
                     # the mother of all function calls
                     x_analysis, P_analysis, P_analysis_inverse, \
-                        innovations_prime  = self.solver(
+                        innovations_prime = self.solver(
                             observations, mask, H_matrix,
                             x_forecast, P_forecast, P_forecast_inverse,
                             R_mat, the_metadata)
@@ -387,20 +393,19 @@ class LinearKalman (object):
                     P_forecast = P_analysis
                     P_forecast_inverse = P_analysis_inverse
 
-
                 if iter_obs_op:
                     # this should be an option...
                     maska = np.concatenate([mask.ravel()
                                             for i in xrange(self.n_params)])
-
                     convergence_norm = np.linalg.norm(x_analysis[maska] -
-                                            x_prev[maska])/float(maska.sum())
+                                                      x_prev[maska])/float(
+                                                          maska.sum())
                     if convergence_norm <= 5e-4:
                         converged = True
-                        LOG.info("Converged (%g) !!!"%convergence_norm)
+                        LOG.info("Converged (%g) !!!" % convergence_norm)
                     x_prev = x_analysis*1.
-                    LOG.info("Iteration %d convergence: %g" %( n_iter,
-                                                            convergence_norm))
+                    LOG.info("Iteration %d convergence: %g" % (
+                        n_iter, convergence_norm))
                 else:
                     break
 
@@ -409,12 +414,11 @@ class LinearKalman (object):
                     # Store current state as x_forecast in case more obs today
                     # the analysis becomes the forecast for the next
                     # iteration
-
                     break
 
                 if n_iter >= 8:
                     # Break if we go over 10 iterations
-                    LOG.info("Wow, too many iterations (%d)!"%n_iter)
+                    LOG.info("Wow, too many iterations (%d)!" % n_iter)
                     LOG.info("Stopping iterations here")
                     converged = True
                     break
@@ -424,24 +428,24 @@ class LinearKalman (object):
 
             if self.diagnostics and have_obs:
                 LOG.info("Plotting")
-                self._plotter_iteration_end(plot_object, x_analysis,
-                                        P_analysis, innovations_prime, mask)
+                self._plotter_iteration_end(plot_object,
+                                            x_analysis, P_analysis,
+                                            innovations_prime, mask)
 
         # Store the current state as previous state
         # Rationale is that when called on demand, we need to be able to
         # propagate state to next available observation
         self.previous_state = Previous_State(step, x_analysis,
-                                            P_analysis, P_analysis_inverse)
+                                             P_analysis, P_analysis_inverse)
 
         return x_analysis, P_analysis, P_analysis_inverse
 
-
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
-                P_forecast_inv, R_mat, the_metadata):
+               P_forecast_inv, R_mat, the_metadata):
 
         x_analysis, P_analysis, P_analysis_inv, innovations_prime = \
-            variational_kalman (
-            observations, mask, R_mat, H_matrix, self.n_params, x_forecast,
-            P_forecast, P_forecast_inv, the_metadata)
+            variational_kalman(
+                observations, mask, R_mat, H_matrix, self.n_params,
+                x_forecast, P_forecast, P_forecast_inv, the_metadata)
 
         return x_analysis, P_analysis, P_analysis_inv, innovations_prime
