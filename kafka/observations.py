@@ -297,19 +297,19 @@ class BHRObservations(RetrieveBRDFDescriptors):
 
 class KafkaOutput(object):
     """A very simple class to output the state."""
-    def __init__(self, tilewidth, geotransform, projection, folder,
+    def __init__(self, geotransform, projection, folder,
                  fmt="GTiff"):
         """The inference engine works on tiles, so we get the tilewidth
         (we assume the tiles are square), the GDAL-friendly geotransform
         and projection, as well as the destination directory and the
         format (as a string that GDAL can understand)."""
-        self.tilewidth = tilewidth
         self.geotransform = geotransform
         self.projection = projection
         self.folder = folder
         self.fmt = fmt
 
-    def dump_data(self, timestep, x_analysis, P_analysis, P_analysis_inv):
+    def dump_data(self, timestep, x_analysis, P_analysis, P_analysis_inv,
+                  state_mask):
         drv = gdal.GetDriverByName(self.fmt)
         for ii, param in enumerate(["w_vis", "x_vis", "a_vis",
                                     "w_nir", "x_nir", "a_nir", "TeLAI"]):
@@ -321,8 +321,9 @@ class KafkaOutput(object):
                                                    'PREDICTOR=1', 'TILED=YES'])
             dst_ds.SetProjection(self.projection)
             dst_ds.SetGeoTransform(self.geotransform)
-            dst_ds.GetRasterBand(1).WriteArray(x_analysis[ii::7].reshape((
-                self.tilewidth, self.tilewidth)))
+            A = np.zeros(state_mask.shape, dtype=np.float32)
+            A[state_mask] = x_analysis[ii::7]
+            dst_ds.GetRasterBand(1).WriteArray(A)
 
 
 if __name__ == "__main__":

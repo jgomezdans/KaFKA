@@ -67,10 +67,10 @@ def kalman_divide_conquer( observations, mask, H_matrix, n_params,
     """This function solves the problem "one pixel at a time" kind of strategy
     """
 
-def variational_kalman( observations, mask, uncertainty, H_matrix, n_params,
+def variational_kalman( observations, mask, state_mask, uncertainty, H_matrix, n_params,
             x_forecast, P_forecast, P_forecast_inv, the_metadata, approx_diagonal=True):
     """We can just use """
-
+    import ipdb; ipdb.set_trace()
     if len(H_matrix) == 2:
         non_linear = True
         H0, H_matrix = H_matrix
@@ -79,15 +79,18 @@ def variational_kalman( observations, mask, uncertainty, H_matrix, n_params,
         non_linear = False
         
     LOG.info("Squeezing prior covariance...")
-    R_mat = uncertainty
-    maska = np.concatenate([mask.ravel() for i in xrange(n_params)]) 
+    
+    M = state_mask[state_mask]
+    MG = mask[state_mask]
+    R_mat = sp.diags(uncertainty.diagonal()[state_mask.ravel()][MG.ravel()])
+    #maska = np.concatenate([MG.ravel() for i in xrange(n_params)]) 
     #Pinv = 1./np.array(P_forecast.diagonal()).squeeze()[maska]
     #P_forecast_inv = sp.eye(Pinv.shape[0])
     #P_forecast_inv.setdiag(Pinv)
     LOG.info("Creating linear problem")
     
-    y = np.zeros_like(observations)
-    y[mask] = observations[mask]
+    y = np.zeros_like(observations[state_mask])
+    y[MG] = observations[state_mask][MG]
     y = y.ravel()
     #y = observations.ravel()#[mask.ravel()]
     #y[~mask.ravel()] = 0.
