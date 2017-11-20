@@ -263,8 +263,8 @@ class LinearKalman (object):
             #  Terejanu's notation
             # Main assumption here is that the "inflation" factor is
             # calculated using the main diagonal of M
-            PQ_matrix = 1./(np.ones(M.shape[0]) + ((
-                M.diagonal()) * self.trajectory_uncertainty.diagonal()))
+            PQ_matrix = (np.ones(M.shape[0]) + (
+                1./(M.diagonal())* self.trajectory_uncertainty.diagonal()))
             # Update P_f = P_a^{-1}/(I+P_a^{-1}.diag + Q)
             P_forecast_inverse = M.dot(sp.dia_matrix((PQ_matrix, 0),
                                                      shape=M.shape))
@@ -312,16 +312,16 @@ class LinearKalman (object):
         The time_grid ought to be a list with the time steps given in the same
         form as self.observation_times"""
         is_first = True
-
-        for ii, timestep in enumerate(time_grid):
-            # First locate all available observations for time step of
-            # interest.
+        istart_date = time_grid[0] # First temporal grid date
+        for ii, timestep in enumerate(time_grid[1:]):
+            # First locate all available observations for time step of interest.
             # Note that there could be more than one...
-            locate_times = [i for i, x in enumerate(self.observations.dates)
-                            if x == timestep]
+            locate_times_idx = np.where(np.logical_and(
+                np.array(self.observations.dates) >= istart_date,
+                np.array(self.observations.dates) < timestep), True, False)
+            locate_times = np.array(self.observations.dates)[
+                           locate_times_idx]
             self.current_timestep = timestep
-            temp_times = [self.observations.dates[k] for k in locate_times]
-            locate_times = temp_times
             LOG.info("timestep %s" % timestep.strftime("%Y-%m-%d"))
 
             if not is_first:
