@@ -140,15 +140,13 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     # This loop can be JIT'ed
     x0 = np.zeros((n_times, 4))
     for i in xrange(n_times):
-        if mask.ravel()[i]:
-            x0[i, :] = x_forecast[state_mapper + n_params * i]
+        if mask[state_mask].flatten()[i]:
+            x0[i, :] = x_forecast[(n_params * i) + state_mapper]
     LOG.info("Running emulators")
     # Calls the run_emulator method that only does different vectors
     # It might be here that we do some sort of clustering
-    M = state_mask[state_mask]
-    MG = mask[state_mask]
-    M = M*MG
-    H0_, dH = run_emulator(emulator, x0[M.ravel()])
+    
+    H0_, dH = run_emulator(emulator, x0[mask[state_mask]])
     
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too
@@ -182,7 +180,7 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
                               #######shape=[n_times, n_params * n_times]).tolil()
     n = 0
     for i in xrange(n_times):
-        if mask.ravel()[i]:
+        if mask[state_mask].flatten()[i]:
             H_matrix[i, state_mapper + n_params * i] = dH[n]
             H0[i] = H0_[n]
             n += 1
@@ -329,7 +327,14 @@ class LinearKalman (object):
             locate_times = np.array(self.observations.dates)[
                            locate_times_idx]
             self.current_timestep = timestep
-            LOG.info("timestep %s" % timestep.strftime("%Y-%m-%d"))
+            
+            LOG.info("Doing timestep from {} -> {}".format(
+                istart_date.strftime("%Y-%m-%d"),
+                timestep.strftime("%Y-%m-%d") ))
+            LOG.info("# of Observations: %d" % len(locate_times))
+            for iobs in locate_times:
+                LOG.info("\t->{}".format(iobs.strftime("%Y-%m-%d")))
+            istart_date = timestep
 
             if not is_first:
                 LOG.info("Advancing state, %s" % timestep.strftime("%Y-%m-%d"))
@@ -345,7 +350,7 @@ class LinearKalman (object):
 
             else:
                 # We do have data, so we assimilate
-                LOG.info("# of Observations: %d" % len(locate_times))
+                
 
                 x_analysis, P_analysis, P_analysis_inverse = self.assimilate(
                                      locate_times, x_forecast, P_forecast,
@@ -354,9 +359,9 @@ class LinearKalman (object):
                                      refine_diag=refine_diag,
                                      iter_obs_op=iter_obs_op,
                                      is_robust=is_robust, diag_str=diag_str)
-
+            LOG.info("Dumping results to disk")
             self.output.dump_data(timestep, x_analysis, P_analysis,
-                                  P_analysis_inverse)
+                                  P_analysis_inverse, self.state_mask)
 
     def assimilate(self, locate_times, x_forecast, P_forecast,
                    P_forecast_inverse,
@@ -441,7 +446,7 @@ class LinearKalman (object):
                     convergence_norm = np.linalg.norm(x_analysis[maska] -
                                                       x_prev[maska])/float(
                                                           maska.sum())
-                    if convergence_norm <= 5e-4:
+                    if convergence_norm <= 5e-3:
                         converged = True
                         LOG.info("Converged (%g) !!!" % convergence_norm)
                     x_prev = x_analysis*1.
@@ -457,7 +462,7 @@ class LinearKalman (object):
                     # iteration
                     break
 
-                if n_iter >= 8:
+                if n_iter >= 15:
                     # Break if we go over 10 iterations
                     LOG.info("Wow, too many iterations (%d)!" % n_iter)
                     LOG.info("Stopping iterations here")

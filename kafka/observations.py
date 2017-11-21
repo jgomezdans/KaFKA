@@ -315,7 +315,8 @@ class KafkaOutput(object):
                                     "w_nir", "x_nir", "a_nir", "TeLAI"]):
             fname = os.path.join(self.folder, "%s_%s.tif" %
                                  (param, timestep.strftime("A%Y%j")))
-            dst_ds = drv.Create(fname, self.tilewidth, self.tilewidth, 1,
+            dst_ds = drv.Create(fname, state_mask.shape[1], 
+                                state_mask.shape[0], 1,
                                 gdal.GDT_Float32, ['COMPRESS=DEFLATE',
                                                    'BIGTIFF=YES',
                                                    'PREDICTOR=1', 'TILED=YES'])
@@ -324,7 +325,6 @@ class KafkaOutput(object):
             A = np.zeros(state_mask.shape, dtype=np.float32)
             A[state_mask] = x_analysis[ii::7]
             dst_ds.GetRasterBand(1).WriteArray(A)
-
 
 if __name__ == "__main__":
     emulator = "../SAIL_emulator_both_500trainingsamples.pkl"
