@@ -27,9 +27,9 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 
 
 import numpy as np
+
 import scipy.sparse as sp
 import scipy.sparse.linalg as spl
-#import netCDF4
 import datetime as dt
 import os
 import gdal
@@ -47,13 +47,10 @@ def iterate_time_grid(time_grid, the_dates):
         locate_times_idx = np.where(np.logical_and(
             np.array(the_dates) >= istart_date,
             np.array(the_dates) < timestep), True, False)
-        locate_times = np.array(the_dates)[
-                           locate_times_idx]
-        current_timestep = timestep
-            
+        locate_times = np.array(the_dates)[locate_times_idx]
         LOG.info("Doing timestep from {} -> {}".format(
                 istart_date.strftime("%Y-%m-%d"),
-                timestep.strftime("%Y-%m-%d") ))
+                timestep.strftime("%Y-%m-%d")))
         LOG.info("# of Observations: %d" % len(locate_times))
         for iobs in locate_times:
                 LOG.info("\t->{}".format(iobs.strftime("%Y-%m-%d")))
@@ -73,12 +70,12 @@ def run_emulator(gp, x, tol=None):
     if len(unique_vectors) == 1:  # Prior!
         cluster_labels = np.zeros(x.shape[0], dtype=np.int16)
     elif len(unique_vectors) > 1e6:
-        
+
         LOG.info("Clustering parameter space")
-        mean = np.mean(x, axis=0) # 7 dimensions
-        cov = np.cov(x, rowvar=0) # 4 x 4 dimensions
+        mean = np.mean(x, axis=0)  # 7 dimensions
+        cov = np.cov(x, rowvar=0)  # 4 x 4 dimensions
         # Draw a 300 element LUT
-        unique_vectors = np.random.multivariate_normal( mean, cov, 
+        unique_vectors = np.random.multivariate_normal(mean, cov,
                                                        5000)
         # Assign each element of x to a LUT/cluster entry
         cluster_labels = locate_in_lut(unique_vectors, x)
@@ -117,7 +114,7 @@ def create_uncertainty(uncertainty, mask):
 
 
 def create_linear_observation_operator(obs_op, n_params, metadata,
-                                       mask, state_mask, 
+                                       mask, state_mask,
                                        x_forecast, band=None):
     """A simple **identity** observation opeartor. It is expected that you
     subclass and redefine things...."""
@@ -137,10 +134,8 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     LOG.info("Creating the ObsOp for band %d" % band)
     n_times = x_forecast.shape[0] / n_params
     good_obs = mask.sum()
-
     H_matrix = sp.lil_matrix((n_times, n_params * n_times),
                              dtype=np.float32)
-
     H0 = np.zeros(n_times, dtype=np.float32)
 
     # So the model has spectral components.
@@ -159,39 +154,11 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     LOG.info("Running emulators")
     # Calls the run_emulator method that only does different vectors
     # It might be here that we do some sort of clustering
-    
+
     H0_, dH = run_emulator(emulator, x0[mask[state_mask]])
-    
+
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too
-    ########@jit
-    #######def fast_assign(n_times, mask, state_mapper, n_params, dH,  H0_):
-        
-        #######H0 = np.zeros(n_times, dtype=np.float32)
-        #######n_good = mask.sum()
-        #######rows = np.zeros(n_good, dtype=np.int64)
-        #######cols = np.zeros(n_good, dtype=np.int64)
-        #######values = np.zeros(n_good, dtype=np.float32)
-        #######n = 0
-        #######m = 0
-        #######for i in xrange(n_times):
-            #######if mask.ravel()[i]:
-                #######for jj,s in enumerate(state_mapper):
-                    #######rows[m] = i
-                    #######cols[m] = s + n_params*i
-                    #######values[m] = dH[n, jj]
-                    #######m += 1
-                ########rows.append( i)
-                ########cols.append(state_mapper + n_params * i)
-                ########values.append(dH[n])
-                ########H_matrix[i, state_mapper + n_params * i] = dH[n]
-                #######H0[i] = H0_[n]
-                #######n += 1
-                #######return H0, rows, cols, values
-    #######H0, rows, cols, values = fast_assign(n_times, mask, 
-                    #######state_mapper, n_params, dH,  H0_)
-    #######H_matrix = sp.coo_matrix ( (values, rows, cols), 
-                              #######shape=[n_times, n_params * n_times]).tolil()
     n = 0
     for i in xrange(n_times):
         if mask[state_mask].flatten()[i]:
@@ -209,15 +176,15 @@ def locate_in_lut(lut, im):
     We assume that `lut` is `[m, np]` and `im` is `[n, np]`, where `n >> m`
     and `np` is not too big. We will look for the location of the row of
     `lut` that is closest to each row in `im`.
-    It returns `idx`, an array with an integer index to the first dimension 
+    It returns `idx`, an array with an integer index to the first dimension
     of lut."""
-    assert ( lut.shape[1] == im.shape[1] )
-    idx = np.linalg.norm ( lut[:, None, :] - im, axis=2).argmin(axis=0)
-    return idx 
+    assert (lut.shape[1] == im.shape[1])
+    idx = np.linalg.norm(lut[:, None, :] - im, axis=2).argmin(axis=0)
+    return idx
 
 
-# This is a faster version for equally-sized blocks. 
-#Currently, open PR on scipy's github
+# This is a faster version for equally-sized blocks.
+# Currently, open PR on scipy's github
 # (https://github.com/scipy/scipy/pull/5619)
 def block_diag(mats, format=None, dtype=None):
     """
@@ -276,7 +243,6 @@ def block_diag(mats, format=None, dtype=None):
 
     from scipy.sparse import issparse
 
-
     n = len(mats)
     mats_ = [None] * n
     for ia, a in enumerate(mats):
@@ -323,12 +289,12 @@ def block_diag(mats, format=None, dtype=None):
 
 
 def spsolve2(a, b):
-    a_lu = spl.splu(a.tocsc()) # LU decomposition for sparse a
+    a_lu = spl.splu(a.tocsc())   # LU decomposition for sparse a
     out = sp.lil_matrix((a.shape[1], b.shape[1]), dtype=np.float32)
     b_csc = b.tocsc()
     for j in xrange(b.shape[1]):
         bb = np.array(b_csc[j, :].todense()).squeeze()
-        out[j,j] = a_lu.solve(bb)[j]
+        out[j, j] = a_lu.solve(bb)[j]
     return out.tocsr()
 
 
@@ -404,7 +370,7 @@ def reconstruct_array(a_matrix, b_matrix, mask, n_params=1):
     Returns
     --------
     The updated `b_matrix`"""
-    
+
     if mask.ndim > 1:
         mask = mask.ravel()
     n = mask.shape[0] # big dimension
@@ -582,7 +548,7 @@ class OutputFile(object):
             The variable type
         group : str
             The netCDF group where the variable goes
-            
+
         Returns
         -------
 
@@ -658,12 +624,12 @@ class OutputFile(object):
 
     def update_time(self, time, index=np.s_[:]):
         """
-        
+
         :param time: array
                     The times to be added to the time variable.
         :param index: slice
                     The slice defines where in the variable the times go.
-        :return: 
+        :return:
         """
         varo = self.nc.variables['time']
         varo[index] = time

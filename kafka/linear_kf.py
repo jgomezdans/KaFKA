@@ -58,7 +58,7 @@ class LinearKalman (object):
     """The main Kalman filter class operating in raster data sets. Note that the
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
-    def __init__(self, observations, output, state_mask, 
+    def __init__(self, observations, output, state_mask, state_propation,
                  linear=True, n_params=1, diagnostics=True,
                  bands_per_observation=1):
         """The class creator takes a list of observations, some metadata and a
@@ -70,6 +70,7 @@ class LinearKalman (object):
         self.bands_per_observation = bands_per_observation
         self.state_mask = state_mask
         self.n_state_elems= self.state_mask.sum()
+        self.advance = state_propagation
         if linear:
             self._create_observation_operator = \
                                             create_linear_observation_operator
@@ -116,38 +117,6 @@ class LinearKalman (object):
                                              format="csr")
         self.trajectory_uncertainty.setdiag(Q)
 
-    def advance(self, x_analysis, P_analysis, P_analysis_inverse):
-        """Advance the state. If we have to update the state
-        precision matrix, I use the information filter formalism.
-        """
-        # Needs to deal with the inverse analysis matrix ;-/
-        x_forecast = self.trajectory_model.dot(x_analysis)
-        if sp.issparse(self.trajectory_uncertainty) and P_analysis is not None:
-            P_forecast = P_analysis + self.trajectory_uncertainty
-            P_forecast_inverse = None
-        elif sp.issparse(self.trajectory_uncertainty) and P_analysis is None:
-            LOG.info("Updating prior *inverse covariance*")
-            # These is an approximation to the information filter equations
-            # (see e.g. Terejanu's notes)
-            M = P_analysis_inverse   # for convenience and to stay with
-            #  Terejanu's notation
-            # Main assumption here is that the "inflation" factor is
-            # calculated using the main diagonal of M
-            PQ_matrix = (np.ones(M.shape[0]) + (
-                1./(M.diagonal())* self.trajectory_uncertainty.diagonal()))
-            # Update P_f = P_a^{-1}/(I+P_a^{-1}.diag + Q)
-            P_forecast_inverse = M.dot(sp.dia_matrix((PQ_matrix, 0),
-                                                     shape=M.shape))
-
-            P_forecast = None
-        else:
-            trajectory_uncertainty = sp.dia_matrix((
-                self.trajectory_uncertainty, 0), shape=P_analysis.shape)
-            P_forecast = P_analysis + trajectory_uncertainty
-            P_forecast_inverse = None
-
-        return x_forecast, P_forecast, P_forecast_inverse
-
     def _get_observations_timestep(self, timestep, band=None):
         """A method that returns the observations, mask and uncertainty for a
         particular timestep. It is envisaged that applications will specialise
@@ -183,9 +152,9 @@ class LinearKalman (object):
         form as self.observation_times"""
         for timestep, locate_times, is_first in iterate_time_grid(
             time_grid, self.observations.dates):
-            
+
             self.current_timestep = timestep
-            
+
             if not is_first:
                 LOG.info("Advancing state, %s" % timestep.strftime("%Y-%m-%d"))
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
@@ -200,7 +169,7 @@ class LinearKalman (object):
 
             else:
                 # We do have data, so we assimilate
-                
+
 
                 x_analysis, P_analysis, P_analysis_inverse = self.assimilate(
                                      locate_times, x_forecast, P_forecast,
@@ -242,7 +211,7 @@ class LinearKalman (object):
                         else:
                             observations, R_mat, mask, the_metadata, emulator \
                                 = self._get_observations_timestep(step, band)
-                        cached_obs.append((observations, R_mat, mask, 
+                        cached_obs.append((observations, R_mat, mask,
                                            the_metadata, emulator))
                     if mask.sum() == 0:
                         # No observations!!
@@ -253,14 +222,14 @@ class LinearKalman (object):
                         P_analysis_inverse = P_forecast_inverse
                         break
                 n_iter += 1
-                
+
                 for band in xrange(self.bands_per_observation):
                     LOG.info("Band %d" % band)
                     # Extract obs, mask and uncertainty for current time
                     # From cache
                     observations, R_mat, mask, the_metadata, the_emulator = \
                         cached_obs[band]
-                    
+
                     if self.diagnostics:
                         LOG.info("Setting up diagnostics...")
                         plot_object = self._set_plot_view(diag_str, step,
@@ -345,4 +314,3 @@ class LinearKalman (object):
                 x_forecast, P_forecast, P_forecast_inv, the_metadata)
 
         return x_analysis, P_analysis, P_analysis_inv, innovations_prime
-
