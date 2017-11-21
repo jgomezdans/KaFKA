@@ -36,6 +36,7 @@ from solvers import variational_kalman
 from utils import locate_in_lut, run_emulator, create_uncertainty
 from utils import create_linear_observation_operator
 from utils import create_nonlinear_observation_operator
+from utils import iterate_time_grid
 
 # Set up logging
 
@@ -180,26 +181,11 @@ class LinearKalman (object):
 
         The time_grid ought to be a list with the time steps given in the same
         form as self.observation_times"""
-        is_first = True
-        istart_date = time_grid[0] # First temporal grid date
-        for ii, timestep in enumerate(time_grid[1:]):
-            # First locate all available observations for time step of interest.
-            # Note that there could be more than one...
-            locate_times_idx = np.where(np.logical_and(
-                np.array(self.observations.dates) >= istart_date,
-                np.array(self.observations.dates) < timestep), True, False)
-            locate_times = np.array(self.observations.dates)[
-                           locate_times_idx]
+        for timestep, locate_times, is_first in iterate_time_grid(
+            time_grid, self.observations.dates):
+            
             self.current_timestep = timestep
             
-            LOG.info("Doing timestep from {} -> {}".format(
-                istart_date.strftime("%Y-%m-%d"),
-                timestep.strftime("%Y-%m-%d") ))
-            LOG.info("# of Observations: %d" % len(locate_times))
-            for iobs in locate_times:
-                LOG.info("\t->{}".format(iobs.strftime("%Y-%m-%d")))
-            istart_date = timestep
-
             if not is_first:
                 LOG.info("Advancing state, %s" % timestep.strftime("%Y-%m-%d"))
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(

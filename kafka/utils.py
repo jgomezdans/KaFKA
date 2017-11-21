@@ -38,6 +38,33 @@ import logging
 LOG = logging.getLogger(__name__)
 
 
+def iterate_time_grid(time_grid, the_dates):
+    is_first = True
+    istart_date = time_grid[0]
+    for ii, timestep in enumerate(time_grid[1:]):
+        # First locate all available observations for time step of interest.
+        # Note that there could be more than one...
+        locate_times_idx = np.where(np.logical_and(
+            np.array(the_dates) >= istart_date,
+            np.array(the_dates) < timestep), True, False)
+        locate_times = np.array(the_dates)[
+                           locate_times_idx]
+        current_timestep = timestep
+            
+        LOG.info("Doing timestep from {} -> {}".format(
+                istart_date.strftime("%Y-%m-%d"),
+                timestep.strftime("%Y-%m-%d") ))
+        LOG.info("# of Observations: %d" % len(locate_times))
+        for iobs in locate_times:
+                LOG.info("\t->{}".format(iobs.strftime("%Y-%m-%d")))
+        istart_date = timestep
+        if is_first:
+            yield timestep, locate_times, True
+            is_first = False
+        else:
+            yield timestep, locate_times, False
+
+
 def run_emulator(gp, x, tol=None):
     # We select the unique values in vector x
     # Note that we could have done this using e.g. a histogram
