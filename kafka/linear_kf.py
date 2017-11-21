@@ -33,7 +33,9 @@ import scipy.sparse as sp
 
 # from utils import  matrix_squeeze, spsolve2, reconstruct_array
 from solvers import variational_kalman
-from utils import locate_in_lut
+from utils import locate_in_lut, run_emulator, create_uncertainty
+from utils import create_linear_observation_operator
+from utils import create_nonlinear_observation_operator
 
 # Set up logging
 
@@ -49,144 +51,6 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 Metadata = namedtuple('Metadata', 'mask uncertainty')
 Previous_State = namedtuple("Previous_State",
                             "timestamp x_vect cov_m icov_mv")
-
-
-def run_emulator(gp, x, tol=None):
-    # We select the unique values in vector x
-    # Note that we could have done this using e.g. a histogram
-    # or some other method to select solutions "close enough"
-    unique_vectors = np.vstack({tuple(row) for row in x})
-    if len(unique_vectors) == 1:  # Prior!
-        cluster_labels = np.zeros(x.shape[0], dtype=np.int16)
-    elif len(unique_vectors) > 1e6:
-        
-        LOG.info("Clustering parameter space")
-        mean = np.mean(x, axis=0) # 7 dimensions
-        cov = np.cov(x, rowvar=0) # 4 x 4 dimensions
-        # Draw a 300 element LUT
-        unique_vectors = np.random.multivariate_normal( mean, cov, 
-                                                       5000)
-        # Assign each element of x to a LUT/cluster entry
-        cluster_labels = locate_in_lut(unique_vectors, x)
-    # Runs emulator for emulation subset
-    try:
-        H_, dH_ = gp.predict(unique_vectors, do_unc=False)
-    except ValueError:
-        # Needed for newer gp version
-        H_, _, dH_ = gp.predict(unique_vectors, do_unc=False)
-
-    H = np.zeros(x.shape[0])
-    dH = np.zeros_like(x)
-    try:
-        nclust = cluster_labels.shape
-    except NameError:
-        for i, uniq in enumerate(unique_vectors):
-            passer = np.all(x == uniq, axis=1)
-            H[passer] = H_[i]
-            dH[passer, :] = dH_[i, :]
-        return H, dH
-
-    for label in np.unique(cluster_labels):
-        H[cluster_labels == label] = H_[label]
-        dH[cluster_labels == label, :] = dH_[label, :]
-    return H, dH
-
-
-def create_uncertainty(uncertainty, mask):
-    """Creates the observational uncertainty matrix. We assume that
-    uncertainty is a single value and we return a diagonal matrix back.
-    We present this diagonal **ONLY** for pixels that have observations
-    (i.e. not masked)."""
-    good_obs = mask.sum()
-    R_mat = np.ones(good_obs)*uncertainty*uncertainty
-    return sp.dia_matrix((R_mat, 0), shape=(R_mat.shape[0], R_mat.shape[0]))
-
-
-def create_linear_observation_operator(obs_op, n_params, metadata,
-                                       mask, state_mask, 
-                                       x_forecast, band=None):
-    """A simple **identity** observation opeartor. It is expected that you
-    subclass and redefine things...."""
-    good_obs = mask.sum()  # size of H_matrix
-    H_matrix = sp.dia_matrix(np.eye(good_obs))
-    return H_matrix
-
-
-def create_nonlinear_observation_operator(n_params, emulator, metadata,
-                                          mask, state_mask,  x_forecast, band):
-    """Using an emulator of the nonlinear model around `x_forecast`.
-    This case is quite special, as I'm focusing on a BHR SAIL
-    version (or the JRC TIP), which have spectral parameters
-    (e.g. leaf single scattering albedo in two bands, etc.). This
-    is achieved by using the `state_mapper` to select which bits
-    of the state vector (and model Jacobian) are used."""
-    LOG.info("Creating the ObsOp for band %d" % band)
-    n_times = x_forecast.shape[0] / n_params
-    good_obs = mask.sum()
-
-    H_matrix = sp.lil_matrix((n_times, n_params * n_times),
-                             dtype=np.float32)
-
-    H0 = np.zeros(n_times, dtype=np.float32)
-
-    # So the model has spectral components.
-    if band == 0:
-        # ssa, asym, TLAI, rsoil
-        state_mapper = np.array([0, 1, 6, 2])
-    elif band == 1:
-        # ssa, asym, TLAI, rsoil
-        state_mapper = np.array([3, 4, 6, 5])
-
-    # This loop can be JIT'ed
-    x0 = np.zeros((n_times, 4))
-    for i in xrange(n_times):
-        if mask[state_mask].flatten()[i]:
-            x0[i, :] = x_forecast[(n_params * i) + state_mapper]
-    LOG.info("Running emulators")
-    # Calls the run_emulator method that only does different vectors
-    # It might be here that we do some sort of clustering
-    
-    H0_, dH = run_emulator(emulator, x0[mask[state_mask]])
-    
-    LOG.info("Storing emulators in H matrix")
-    # This loop can be JIT'ed too
-    ########@jit
-    #######def fast_assign(n_times, mask, state_mapper, n_params, dH,  H0_):
-        
-        #######H0 = np.zeros(n_times, dtype=np.float32)
-        #######n_good = mask.sum()
-        #######rows = np.zeros(n_good, dtype=np.int64)
-        #######cols = np.zeros(n_good, dtype=np.int64)
-        #######values = np.zeros(n_good, dtype=np.float32)
-        #######n = 0
-        #######m = 0
-        #######for i in xrange(n_times):
-            #######if mask.ravel()[i]:
-                #######for jj,s in enumerate(state_mapper):
-                    #######rows[m] = i
-                    #######cols[m] = s + n_params*i
-                    #######values[m] = dH[n, jj]
-                    #######m += 1
-                ########rows.append( i)
-                ########cols.append(state_mapper + n_params * i)
-                ########values.append(dH[n])
-                ########H_matrix[i, state_mapper + n_params * i] = dH[n]
-                #######H0[i] = H0_[n]
-                #######n += 1
-                #######return H0, rows, cols, values
-    #######H0, rows, cols, values = fast_assign(n_times, mask, 
-                    #######state_mapper, n_params, dH,  H0_)
-    #######H_matrix = sp.coo_matrix ( (values, rows, cols), 
-                              #######shape=[n_times, n_params * n_times]).tolil()
-    n = 0
-    for i in xrange(n_times):
-        if mask[state_mask].flatten()[i]:
-            H_matrix[i, state_mapper + n_params * i] = dH[n]
-            H0[i] = H0_[n]
-            n += 1
-    LOG.info("\tDone!")
-
-    return (H0, H_matrix.tocsr())
 
 
 class LinearKalman (object):
