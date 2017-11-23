@@ -35,6 +35,7 @@ from utils import locate_in_lut, run_emulator, create_uncertainty
 from utils import create_linear_observation_operator
 from utils import create_nonlinear_observation_operator
 from utils import iterate_time_grid
+from kf_tools import propagate_information_filter
 
 # Set up logging
 
@@ -56,7 +57,8 @@ class LinearKalman (object):
     """The main Kalman filter class operating in raster data sets. Note that the
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
-    def __init__(self, observations, output, state_mask, state_propagation,
+    def __init__(self, observations, output, state_mask,
+                 state_propagation=propagate_information_filter,
                  linear=True, n_params=1, diagnostics=True,
                  bands_per_observation=1):
         """The class creator takes a list of observations, some metadata and a
