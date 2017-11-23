@@ -158,7 +158,8 @@ class LinearKalman (object):
             if not is_first:
                 LOG.info("Advancing state, %s" % timestep.strftime("%Y-%m-%d"))
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
-                    x_analysis, P_analysis, P_analysis_inverse)
+                    x_analysis, P_analysis, P_analysis_inverse,
+                    self.trajectory_model, self.trajectory_uncertainty)
             is_first = False
             if len(locate_times) == 0:
                 # Just advance the time
@@ -264,7 +265,7 @@ class LinearKalman (object):
                     convergence_norm = np.linalg.norm(x_analysis[maska] -
                                                       x_prev[maska])/float(
                                                           maska.sum())
-                    if convergence_norm <= 5e-3:
+                    if convergence_norm <= 1e-3:
                         converged = True
                         LOG.info("Converged (%g) !!!" % convergence_norm)
                     x_prev = x_analysis*1.
