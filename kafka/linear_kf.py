@@ -29,8 +29,6 @@ import scipy.sparse as sp
 
 # from scipy.spatial.distance import squareform, pdist
 
-
-
 # from utils import  matrix_squeeze, spsolve2, reconstruct_array
 from solvers import variational_kalman
 from utils import locate_in_lut, run_emulator, create_uncertainty
@@ -58,7 +56,7 @@ class LinearKalman (object):
     """The main Kalman filter class operating in raster data sets. Note that the
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
-    def __init__(self, observations, output, state_mask, state_propation,
+    def __init__(self, observations, output, state_mask, state_propagation,
                  linear=True, n_params=1, diagnostics=True,
                  bands_per_observation=1):
         """The class creator takes a list of observations, some metadata and a
@@ -69,7 +67,7 @@ class LinearKalman (object):
         self.diagnostics = diagnostics
         self.bands_per_observation = bands_per_observation
         self.state_mask = state_mask
-        self.n_state_elems= self.state_mask.sum()
+        self.n_state_elems = self.state_mask.sum()
         self.advance = state_propagation
         if linear:
             self._create_observation_operator = \
@@ -169,7 +167,6 @@ class LinearKalman (object):
 
             else:
                 # We do have data, so we assimilate
-
 
                 x_analysis, P_analysis, P_analysis_inverse = self.assimilate(
                                      locate_times, x_forecast, P_forecast,
@@ -310,7 +307,8 @@ class LinearKalman (object):
 
         x_analysis, P_analysis, P_analysis_inv, innovations_prime = \
             variational_kalman(
-                observations, mask, self.state_mask, R_mat, H_matrix, self.n_params,
+                observations, mask, self.state_mask, R_mat, H_matrix,
+                self.n_params,
                 x_forecast, P_forecast, P_forecast_inv, the_metadata)
 
         return x_analysis, P_analysis, P_analysis_inv, innovations_prime
