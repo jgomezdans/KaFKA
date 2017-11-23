@@ -61,7 +61,7 @@ def propagate_information_filter_LAI(x_analysis, P_analysis,
     
     P_forecast_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
 
-    return x_forecast, None, P_forecast_inverse
+    return x0, None, P_forecast_inverse
 
 def no_propagation(x_analysis, P_analysis, 
                                      P_analysis_inverse, 
