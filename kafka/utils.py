@@ -123,6 +123,7 @@ def create_linear_observation_operator(obs_op, n_params, metadata,
     return H_matrix
 
 
+
 def create_nonlinear_observation_operator(n_params, emulator, metadata,
                                           mask, state_mask,  x_forecast, band):
     """Using an emulator of the nonlinear model around `x_forecast`.
@@ -147,10 +148,13 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
         state_mapper = np.array([3, 4, 6, 5])
 
     # This loop can be JIT'ed
+    import time
     x0 = np.zeros((n_times, 4))
-    for i in xrange(n_times):
-        if mask[state_mask].flatten()[i]:
+    for i, m in enumerate(mask[state_mask].flatten()):
+        if m:
             x0[i, :] = x_forecast[(n_params * i) + state_mapper]
+    t1 = time.time()
+    print "it took ", t1-t0, " to run"
     LOG.info("Running emulators")
     # Calls the run_emulator method that only does different vectors
     # It might be here that we do some sort of clustering
@@ -160,8 +164,8 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too
     n = 0
-    for i in xrange(n_times):
-        if mask[state_mask].flatten()[i]:
+    for i, m in enumerate(mask[state_mask].flatten()):
+        if m:
             H_matrix[i, state_mapper + n_params * i] = dH[n]
             H0[i] = H0_[n]
             n += 1
