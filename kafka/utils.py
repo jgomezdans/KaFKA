@@ -148,13 +148,10 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
         state_mapper = np.array([3, 4, 6, 5])
 
     # This loop can be JIT'ed
-    import time
     x0 = np.zeros((n_times, 4))
     for i, m in enumerate(mask[state_mask].flatten()):
         if m:
             x0[i, :] = x_forecast[(n_params * i) + state_mapper]
-    t1 = time.time()
-    print "it took ", t1-t0, " to run"
     LOG.info("Running emulators")
     # Calls the run_emulator method that only does different vectors
     # It might be here that we do some sort of clustering
