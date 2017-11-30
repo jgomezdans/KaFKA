@@ -123,6 +123,7 @@ def create_linear_observation_operator(obs_op, n_params, metadata,
     return H_matrix
 
 
+
 def create_nonlinear_observation_operator(n_params, emulator, metadata,
                                           mask, state_mask,  x_forecast, band):
     """Using an emulator of the nonlinear model around `x_forecast`.
@@ -138,6 +139,7 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
                              dtype=np.float32)
     H0 = np.zeros(n_times, dtype=np.float32)
 
+
     # So the model has spectral components.
     if band == 0:
         # ssa, asym, TLAI, rsoil
@@ -148,8 +150,8 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
 
     # This loop can be JIT'ed
     x0 = np.zeros((n_times, 4))
-    for i in xrange(n_times):
-        if mask[state_mask].flatten()[i]:
+    for i, m in enumerate(mask[state_mask].flatten()):
+        if m:
             x0[i, :] = x_forecast[(n_params * i) + state_mapper]
     LOG.info("Running emulators")
     # Calls the run_emulator method that only does different vectors
@@ -160,15 +162,15 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too
     n = 0
-    for i in xrange(n_times):
-        if mask[state_mask].flatten()[i]:
+    for i, m in enumerate(mask[state_mask].flatten()):
+        if m:
             H_matrix[i, state_mapper + n_params * i] = dH[n]
             H0[i] = H0_[n]
             n += 1
+            
     LOG.info("\tDone!")
 
     return (H0, H_matrix.tocsr())
-
 
 
 def locate_in_lut(lut, im):
