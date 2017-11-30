@@ -139,6 +139,7 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
                              dtype=np.float32)
     H0 = np.zeros(n_times, dtype=np.float32)
 
+
     # So the model has spectral components.
     if band == 0:
         # ssa, asym, TLAI, rsoil
@@ -166,10 +167,10 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
             H_matrix[i, state_mapper + n_params * i] = dH[n]
             H0[i] = H0_[n]
             n += 1
+            
     LOG.info("\tDone!")
 
     return (H0, H_matrix.tocsr())
-
 
 
 def locate_in_lut(lut, im):
