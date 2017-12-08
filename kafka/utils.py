@@ -27,9 +27,9 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 
 
 import numpy as np
+
 import scipy.sparse as sp
 import scipy.sparse.linalg as spl
-#import netCDF4
 import datetime as dt
 import os
 import gdal
@@ -37,8 +37,156 @@ import gdal
 import logging
 LOG = logging.getLogger(__name__)
 
-# This is a faster version for equally-sized blocks. 
-#Currently, open PR on scipy's github
+
+def iterate_time_grid(time_grid, the_dates):
+    is_first = True
+    istart_date = time_grid[0]
+    for ii, timestep in enumerate(time_grid[1:]):
+        # First locate all available observations for time step of interest.
+        # Note that there could be more than one...
+        locate_times_idx = np.where(np.logical_and(
+            np.array(the_dates) >= istart_date,
+            np.array(the_dates) < timestep), True, False)
+        locate_times = np.array(the_dates)[locate_times_idx]
+        LOG.info("Doing timestep from {} -> {}".format(
+                istart_date.strftime("%Y-%m-%d"),
+                timestep.strftime("%Y-%m-%d")))
+        LOG.info("# of Observations: %d" % len(locate_times))
+        for iobs in locate_times:
+                LOG.info("\t->{}".format(iobs.strftime("%Y-%m-%d")))
+        istart_date = timestep
+        if is_first:
+            yield timestep, locate_times, True
+            is_first = False
+        else:
+            yield timestep, locate_times, False
+
+
+def run_emulator(gp, x, tol=None):
+    # We select the unique values in vector x
+    # Note that we could have done this using e.g. a histogram
+    # or some other method to select solutions "close enough"
+    unique_vectors = np.vstack({tuple(row) for row in x})
+    if len(unique_vectors) == 1:  # Prior!
+        cluster_labels = np.zeros(x.shape[0], dtype=np.int16)
+    elif len(unique_vectors) > 1e6:
+
+        LOG.info("Clustering parameter space")
+        mean = np.mean(x, axis=0)  # 7 dimensions
+        cov = np.cov(x, rowvar=0)  # 4 x 4 dimensions
+        # Draw a 300 element LUT
+        unique_vectors = np.random.multivariate_normal(mean, cov,
+                                                       5000)
+        # Assign each element of x to a LUT/cluster entry
+        cluster_labels = locate_in_lut(unique_vectors, x)
+    # Runs emulator for emulation subset
+    try:
+        H_, dH_ = gp.predict(unique_vectors, do_unc=False)
+    except ValueError:
+        # Needed for newer gp version
+        H_, _, dH_ = gp.predict(unique_vectors, do_unc=False)
+
+    H = np.zeros(x.shape[0])
+    dH = np.zeros_like(x)
+    try:
+        nclust = cluster_labels.shape
+    except NameError:
+        for i, uniq in enumerate(unique_vectors):
+            passer = np.all(x == uniq, axis=1)
+            H[passer] = H_[i]
+            dH[passer, :] = dH_[i, :]
+        return H, dH
+
+    for label in np.unique(cluster_labels):
+        H[cluster_labels == label] = H_[label]
+        dH[cluster_labels == label, :] = dH_[label, :]
+    return H, dH
+
+
+def create_uncertainty(uncertainty, mask):
+    """Creates the observational uncertainty matrix. We assume that
+    uncertainty is a single value and we return a diagonal matrix back.
+    We present this diagonal **ONLY** for pixels that have observations
+    (i.e. not masked)."""
+    good_obs = mask.sum()
+    R_mat = np.ones(good_obs)*uncertainty*uncertainty
+    return sp.dia_matrix((R_mat, 0), shape=(R_mat.shape[0], R_mat.shape[0]))
+
+
+def create_linear_observation_operator(obs_op, n_params, metadata,
+                                       mask, state_mask,
+                                       x_forecast, band=None):
+    """A simple **identity** observation opeartor. It is expected that you
+    subclass and redefine things...."""
+    good_obs = mask.sum()  # size of H_matrix
+    H_matrix = sp.dia_matrix(np.eye(good_obs))
+    return H_matrix
+
+
+
+def create_nonlinear_observation_operator(n_params, emulator, metadata,
+                                          mask, state_mask,  x_forecast, band):
+    """Using an emulator of the nonlinear model around `x_forecast`.
+    This case is quite special, as I'm focusing on a BHR SAIL
+    version (or the JRC TIP), which have spectral parameters
+    (e.g. leaf single scattering albedo in two bands, etc.). This
+    is achieved by using the `state_mapper` to select which bits
+    of the state vector (and model Jacobian) are used."""
+    LOG.info("Creating the ObsOp for band %d" % band)
+    n_times = x_forecast.shape[0] / n_params
+    good_obs = mask.sum()
+    H_matrix = sp.lil_matrix((n_times, n_params * n_times),
+                             dtype=np.float32)
+    H0 = np.zeros(n_times, dtype=np.float32)
+
+
+    # So the model has spectral components.
+    if band == 0:
+        # ssa, asym, TLAI, rsoil
+        state_mapper = np.array([0, 1, 6, 2])
+    elif band == 1:
+        # ssa, asym, TLAI, rsoil
+        state_mapper = np.array([3, 4, 6, 5])
+
+    # This loop can be JIT'ed
+    x0 = np.zeros((n_times, 4))
+    for i, m in enumerate(mask[state_mask].flatten()):
+        if m:
+            x0[i, :] = x_forecast[(n_params * i) + state_mapper]
+    LOG.info("Running emulators")
+    # Calls the run_emulator method that only does different vectors
+    # It might be here that we do some sort of clustering
+
+    H0_, dH = run_emulator(emulator, x0[mask[state_mask]])
+
+    LOG.info("Storing emulators in H matrix")
+    # This loop can be JIT'ed too
+    n = 0
+    for i, m in enumerate(mask[state_mask].flatten()):
+        if m:
+            H_matrix[i, state_mapper + n_params * i] = dH[n]
+            H0[i] = H0_[n]
+            n += 1
+            
+    LOG.info("\tDone!")
+
+    return (H0, H_matrix.tocsr())
+
+
+def locate_in_lut(lut, im):
+    """This function locates a samples nearest neighbour in another dataset.
+    We assume that `lut` is `[m, np]` and `im` is `[n, np]`, where `n >> m`
+    and `np` is not too big. We will look for the location of the row of
+    `lut` that is closest to each row in `im`.
+    It returns `idx`, an array with an integer index to the first dimension
+    of lut."""
+    assert (lut.shape[1] == im.shape[1])
+    idx = np.linalg.norm(lut[:, None, :] - im, axis=2).argmin(axis=0)
+    return idx
+
+
+# This is a faster version for equally-sized blocks.
+# Currently, open PR on scipy's github
 # (https://github.com/scipy/scipy/pull/5619)
 def block_diag(mats, format=None, dtype=None):
     """
@@ -97,7 +245,6 @@ def block_diag(mats, format=None, dtype=None):
 
     from scipy.sparse import issparse
 
-
     n = len(mats)
     mats_ = [None] * n
     for ia, a in enumerate(mats):
@@ -144,12 +291,12 @@ def block_diag(mats, format=None, dtype=None):
 
 
 def spsolve2(a, b):
-    a_lu = spl.splu(a.tocsc()) # LU decomposition for sparse a
+    a_lu = spl.splu(a.tocsc())   # LU decomposition for sparse a
     out = sp.lil_matrix((a.shape[1], b.shape[1]), dtype=np.float32)
     b_csc = b.tocsc()
     for j in xrange(b.shape[1]):
         bb = np.array(b_csc[j, :].todense()).squeeze()
-        out[j,j] = a_lu.solve(bb)[j]
+        out[j, j] = a_lu.solve(bb)[j]
     return out.tocsr()
 
 
@@ -225,7 +372,7 @@ def reconstruct_array(a_matrix, b_matrix, mask, n_params=1):
     Returns
     --------
     The updated `b_matrix`"""
-    
+
     if mask.ndim > 1:
         mask = mask.ravel()
     n = mask.shape[0] # big dimension
@@ -403,7 +550,7 @@ class OutputFile(object):
             The variable type
         group : str
             The netCDF group where the variable goes
-            
+
         Returns
         -------
 
@@ -479,12 +626,12 @@ class OutputFile(object):
 
     def update_time(self, time, index=np.s_[:]):
         """
-        
+
         :param time: array
                     The times to be added to the time variable.
         :param index: slice
                     The slice defines where in the variable the times go.
-        :return: 
+        :return:
         """
         varo = self.nc.variables['time']
         varo[index] = time
