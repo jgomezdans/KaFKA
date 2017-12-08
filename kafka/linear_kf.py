@@ -61,8 +61,14 @@ class LinearKalman (object):
                  state_propagation=propagate_information_filter,
                  linear=True, n_params=1, diagnostics=True,
                  bands_per_observation=1):
-        """The class creator takes a list of observations, some metadata and a
-        pointer to an output array."""
+        """The class creator takes (i) an observations object, (ii) an output
+        writer object, (iii) the state mask (a boolean 2D array indicating which
+        pixels are used in the inference), and additionally, (iv) a state 
+        propagation scheme (defaults to `propagate_information_filter`), 
+        whether a linear model is used or not, the number of parameters in 
+        the state vector, whether diagnostics are being reported, and the 
+        number of bands per observation.
+        """
         self.n_params = n_params
         self.observations = observations
         self.output = output
@@ -70,7 +76,7 @@ class LinearKalman (object):
         self.bands_per_observation = bands_per_observation
         self.state_mask = state_mask
         self.n_state_elems = self.state_mask.sum()
-        self.advance = state_propagation
+        self._advance = state_propagation
         if linear:
             self._create_observation_operator = \
                                             create_linear_observation_operator
@@ -78,7 +84,16 @@ class LinearKalman (object):
             self._create_observation_operator = \
                                         create_nonlinear_observation_operator
         LOG.info("Starting KaFKA run!!!")
-
+        
+    def advance(self, x_analysis, P_analysis, P_analysis_inverse,
+                    trajectory_model, trajectory_uncertainty):
+        LOG.info("Calling state propagator...")
+        x_forecast, P_forecast, P_forecast_inverse = \
+            self._advance(x_analysis, P_analysis, P_analysis_inverse,
+                          trajectory_model, trajectory_uncertainty)
+        return x_forecast, P_forecast, P_forecast_inverse
+        
+        
     def _set_plot_view(self, diag_string, timestep, obs):
         """This sets out the plot view for each iteration. Please override this
         method with whatever you want."""
