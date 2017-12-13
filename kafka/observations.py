@@ -51,7 +51,7 @@ import numpy as np
 
 from BRDF_descriptors import RetrieveBRDFDescriptors
 
-from kernels import Kernels
+#from kernels import Kernels
 
 import scipy.sparse as sp
 from scipy.ndimage import zoom
@@ -83,7 +83,7 @@ def get_modis_dates(fnames):
 # TODO needs class for MODIS L1b product too
 # These classes should define emulators
 
-
+'''
 class MOD09_ObservationsKernels(object):
     """A generic M*D09 data reader"""
     def __init__(self, dates, filenames):
@@ -143,7 +143,7 @@ class MOD09_ObservationsKernels(object):
         data_object = MOD09_data(refl, mask, uncertainty, K, sza, vza, raa)
 
         return data_object
-
+'''
 
 class SynergyKernels(object):
     """An object to store, process and update linear kernel weights datasets
