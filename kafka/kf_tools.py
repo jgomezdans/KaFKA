@@ -11,6 +11,39 @@ import scipy.sparse.linalg as spl
 from utils import block_diag
 
 
+def band_selecta(band):
+    if band == 0:
+        return np.array([0, 1, 6, 2])
+    else:
+        return np.array([3, 4, 6, 5])
+
+
+def hessian_correction_pixel(gp, x0, C_obs_inv, innovation, band, nparams):
+    selecta = band_selecta(band)
+    ddH = gp.hessian(np.atleast_2d(x0[selecta]))
+    big_ddH = np.zeros((nparams,nparams))
+    for i, ii in enumerate(selecta):
+        for j, jj in enumerate(selecta):
+            big_ddH[ii,jj] = ddH.squeeze()[i,j]        
+    big_Hessian_corr = big_ddH*C_obs_inv*innovation
+    return big_Hessian_corr
+
+
+def hessian_correction(gp, x0,P_inv, innovation, mask, state_mask, band, nparams):
+    C_obs_inv = P_inv.diagonal()[state_mask.flatten()]
+    mask = mask[state_mask].flatten()
+    little_hess = []
+    for i, (innov, C, m) in enumerate(zip(innovation, C_obs_inv, mask)):
+        x0_pixel =  x0.squeeze()[nparams*i:nparams*(i+1)]
+        if not m:
+            hessian_corr = np.zeros((nparams,nparams))
+        else:
+            hessian_corr = m * hessian_correction_pixel(gp, x0_pixel,C, innov, band, nparams)
+        little_hess.append(hessian_corr)
+    hessian_corr = block_diag(little_hess)
+    return hessian_corr
+
+
 def tip_prior():
     """The JRC-TIP prior in a convenient function which is fun for the whole
     family. Note that the effective LAI is here defined in transformed space
@@ -19,7 +52,7 @@ def tip_prior():
     Returns
     -------
     The mean prior vector, covariance and inverse covariance matrices."""
-    sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.5]) # broadly TLAI 0->7 for 1sigma
+    sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.35]) # broadly TLAI 0->7 for 1sigma
     x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, np.exp(-0.5*1.5)])
     # The individual covariance matrix
     little_p = np.diag ( sigma**2).astype(np.float32)
@@ -159,7 +192,7 @@ def propagate_information_filter_LAI(x_analysis, P_analysis,
     lai_post_cov = P_analysis_inverse.diagonal()
     c_inv_prior_mat = []
     for n in xrange(n_pixels):
-        c_inv_prior[6,6] =  lai_post_cov[n]
+        c_inv_prior[6,6] =  40 #lai_post_cov[n]
         c_inv_prior_mat.append(c_inv_prior)
     
     P_forecast_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
