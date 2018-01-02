@@ -35,7 +35,7 @@ from utils import locate_in_lut, run_emulator, create_uncertainty
 from utils import create_linear_observation_operator
 from utils import create_nonlinear_observation_operator
 from utils import iterate_time_grid
-from kf_tools import propagate_information_filter
+from kf_tools import hessian_correction, propagate_information_filter_SLOW
 
 # Set up logging
 
@@ -58,7 +58,7 @@ class LinearKalman (object):
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
     def __init__(self, observations, output, state_mask,
-                 state_propagation=propagate_information_filter,
+                 state_propagation=propagate_information_filter_SLOW,
                  linear=True, n_params=1, diagnostics=True,
                  bands_per_observation=1):
         """The class creator takes (i) an observations object, (ii) an output
@@ -267,9 +267,16 @@ class LinearKalman (object):
                             x_forecast, P_forecast, P_forecast_inverse,
                             R_mat, the_metadata)
 
+                    
+                    P_correction = hessian_correction(
+                                the_emulator, x_analysis, R_mat, 
+                                innovations_prime, mask, self.state_mask, band, self.n_params)
+
+                    P_analysis_inverse = P_analysis_inverse - P_correction
+                    
                     x_forecast = x_analysis*1
                     P_forecast = P_analysis
-                    P_forecast_inverse = P_analysis_inverse
+                    P_forecast_inverse = P_analysis_inverse*1
 
                 if iter_obs_op:
                     # this should be an option...

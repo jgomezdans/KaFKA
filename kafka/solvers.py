@@ -24,7 +24,7 @@ import numpy as np
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
-from utils import  matrix_squeeze, spsolve2, reconstruct_array
+from utils import spsolve2
 
 # Set up logging
 import logging

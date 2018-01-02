@@ -13,7 +13,7 @@ myPath = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, myPath + '/../')
 
 from kafka.kf_tools import propagate_standard_kalman
-from kafka.kf_tools import propagate_information_filter
+from kafka.kf_tools import propagate_information_filter_SLOW
 
 
 def test_propagate_standard_kalman():
@@ -39,7 +39,7 @@ def test_propagate_information_filter():
     Pi = np.linalg.inv(Pd)
     Q_matrix = np.eye(7)*0.1
 
-    x_forecast, P_forecast, P_forecast_inverse = propagate_information_filter(
+    x_forecast, P_forecast, P_forecast_inverse = propagate_information_filter_SLOW(
         x_analysis, None, Pi, M_matrix, Q_matrix)
     assert np.allclose(
         np.array(P_forecast_inverse.todense()).squeeze().diagonal(),
