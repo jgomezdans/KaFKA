@@ -29,11 +29,11 @@ def hessian_correction_pixel(gp, x0, C_obs_inv, innovation, band, nparams):
     return big_hessian_corr
 
 
-def hessian_correction(gp, x0, P_inv, innovation, mask, state_mask, band,
+def hessian_correction(gp, x0, R_mat, innovation, mask, state_mask, band,
                        nparams):
     """Calculates higher order Hessian correction for the likelihood term.
     Needs the GP, the Observational uncertainty, the mask...."""
-    C_obs_inv = P_inv.diagonal()[state_mask.flatten()]
+    C_obs_inv = R_mat.diagonal()[state_mask.flatten()]
     mask = mask[state_mask].flatten()
     little_hess = []
     for i, (innov, C, m) in enumerate(zip(innovation, C_obs_inv, mask)):
