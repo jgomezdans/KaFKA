@@ -216,7 +216,7 @@ class LinearKalman (object):
         return x_analysis, P_analysis, P_analysis_inverse
 
     def assimilate_band(self, band, timestep, x_forecast, P_forecast,
-                        P_forecast_inverse, convergence_tolerance=1e-4,
+                        P_forecast_inverse, convergence_tolerance=1e-3,
                         min_iterations=4):
         """A method to assimilate a band using an interative linearisation
         approach.  This method isn't very sexy, just (i) reads the data, (ii)
@@ -243,7 +243,7 @@ class LinearKalman (object):
                                                          x_prev,
                                                          band)
             x_analysis, P_analysis, P_analysis_inverse, \
-                innovations = self._solver(
+                innovations, fwd_modelled = self.solver(
                     data.observations, data.mask, H_matrix, x_forecast,
                     P_forecast, P_forecast_inverse, data.uncertainty,
                     data.metadata)
@@ -272,7 +272,7 @@ class LinearKalman (object):
             n_iter += 1
         # Correct hessian for higher order terms
         P_correction = hessian_correction(data.emulator, x_analysis,
-                                          P_analysis_inverse, innovations,
+                                          data.uncertainty, innovations,
                                           data.mask, self.state_mask, band,
                                           self.n_params)
         P_analysis_inverse = P_analysis_inverse - P_correction
@@ -282,10 +282,12 @@ class LinearKalman (object):
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
                P_forecast_inv, R_mat, the_metadata):
 
-        x_analysis, P_analysis, P_analysis_inv, innovations_prime = \
+        x_analysis, P_analysis, P_analysis_inv, \
+            innovations_prime, fwd_modelled = \
             variational_kalman(
                 observations, mask, self.state_mask, R_mat, H_matrix,
                 self.n_params,
                 x_forecast, P_forecast, P_forecast_inv, the_metadata)
 
-        return x_analysis, P_analysis, P_analysis_inv, innovations_prime
+        return x_analysis, P_analysis, P_analysis_inv, \
+            innovations_prime, fwd_modelled
