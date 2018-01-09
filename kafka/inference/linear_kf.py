@@ -36,6 +36,7 @@ from utils import create_linear_observation_operator
 from utils import create_nonlinear_observation_operator
 from utils import iterate_time_grid
 from kf_tools import propagate_information_filter
+from kf_tools import hessian_correction
 
 # Set up logging
 
@@ -86,7 +87,7 @@ class LinearKalman (object):
         LOG.info("Starting KaFKA run!!!")
 
     def advance(self, x_analysis, P_analysis, P_analysis_inverse,
-                    trajectory_model, trajectory_uncertainty):
+                trajectory_model, trajectory_uncertainty):
         LOG.info("Calling state propagator...")
         x_forecast, P_forecast, P_forecast_inverse = \
             self._advance(x_analysis, P_analysis, P_analysis_inverse,
@@ -205,119 +206,78 @@ class LinearKalman (object):
         variance `P_forecast`."""
         for step in locate_times:
             LOG.info("Assimilating %s..." % step.strftime("%Y-%m-%d"))
-            # This first loop iterates the solution for all bands
-            # We store the forecast to compare convergence after one
-            # iteration
-            x_prev = x_forecast*1.
-            converged = False
-            n_iter = 0
-            have_obs = True
-            while True:
-                if n_iter == 0:
-                    # Read in the data for all bands so we don't have
-                    # to read it many times.
-                    cached_obs = []
-                    for band in xrange(self.bands_per_observation):
-                        LOG.info("\tReading observations in....")
-                        if self.bands_per_observation == 1:
-                            observations, R_mat, mask, the_metadata, emulator \
-                                = self._get_observations_timestep(step, None)
-                        else:
-                            observations, R_mat, mask, the_metadata, emulator \
-                                = self._get_observations_timestep(step, band)
-                        cached_obs.append((observations, R_mat, mask,
-                                           the_metadata, emulator))
-                    if mask.sum() == 0:
-                        # No observations!!
-                        LOG.info("No observations for band %d" % (band+1))
-                        have_obs = False
-                        x_analysis = x_forecast*1
-                        P_analysis = P_forecast
-                        P_analysis_inverse = P_forecast_inverse
-                        break
-                n_iter += 1
-
-                for band in xrange(self.bands_per_observation):
-                    LOG.info("Band %d" % band)
-                    # Extract obs, mask and uncertainty for current time
-                    # From cache
-                    observations, R_mat, mask, the_metadata, the_emulator = \
-                        cached_obs[band]
-
-                    if self.diagnostics:
-                        LOG.info("Setting up diagnostics...")
-                        plot_object = self._set_plot_view(diag_str, step,
-                                                          observations)
-                        self._plotter_iteration_start(plot_object, x_forecast,
-                                                      observations, mask)
-                    if self.bands_per_observation == 1:
-                        # Remember that x_prev is the value that the iteration
-                        # is working on. Starts with x_forecast, but updated
-                        H_matrix = self._create_observation_operator(
-                            self.n_params, the_emulator, the_metadata,
-                            mask, self.state_mask, x_prev, None)
-                    else:
-                        H_matrix = self._create_observation_operator(
-                            self.n_params, the_emulator, the_metadata,
-                            mask, self.state_mask, x_prev, band)
-                    # the mother of all function calls
-                    x_analysis, P_analysis, P_analysis_inverse, \
-                        innovations_prime = self.solver(
-                            observations, mask, H_matrix,
-                            x_forecast, P_forecast, P_forecast_inverse,
-                            R_mat, the_metadata)
-
-                    x_forecast = x_analysis*1
-                    P_forecast = P_analysis
-                    P_forecast_inverse = P_analysis_inverse
-
-                if iter_obs_op:
-                    # this should be an option...
-                    M = mask[self.state_mask]
-                    maska = np.concatenate([M.ravel()
-                                            for i in xrange(self.n_params)])
-                    convergence_norm = np.linalg.norm(x_analysis[maska] -
-                                                      x_prev[maska])/float(
-                                                          maska.sum())
-                    if convergence_norm <= 1e-3:
-                        converged = True
-                        LOG.info("Converged (%g) !!!" % convergence_norm)
-                    x_prev = x_analysis*1.
-                    LOG.info("Iteration %d convergence: %g" % (
-                        n_iter, convergence_norm))
-                else:
-                    break
-
-                if converged and n_iter > 1:
-                    # Convergence, getting out of loop
-                    # Store current state as x_forecast in case more obs today
-                    # the analysis becomes the forecast for the next
-                    # iteration
-                    break
-
-                if n_iter >= 15:
-                    # Break if we go over 10 iterations
-                    LOG.info("Wow, too many iterations (%d)!" % n_iter)
-                    LOG.info("Stopping iterations here")
-                    converged = True
-                    break
-            if is_robust and converged:
-                # TODO update mask using innovations
-                pass
-
-            if self.diagnostics and have_obs:
-                LOG.info("Plotting")
-                self._plotter_iteration_end(plot_object,
-                                            x_analysis, P_analysis,
-                                            innovations_prime, mask)
-
-        # Store the current state as previous state
-        # Rationale is that when called on demand, we need to be able to
-        # propagate state to next available observation
+            for band in xrange(self.bands_per_observation):
+                x_analysis, P_analysis, P_analysis_inverse, innovations = \
+                    self.assimilate_band(band, step, x_forecast, P_forecast,
+                                         P_forecast_inverse)
         self.previous_state = Previous_State(step, x_analysis,
                                              P_analysis, P_analysis_inverse)
 
         return x_analysis, P_analysis, P_analysis_inverse
+
+    def assimilate_band(self, band, timestep, x_forecast, P_forecast,
+                        P_forecast_inverse, convergence_tolerance=1e-4,
+                        min_iterations=4):
+        """A method to assimilate a band using an interative linearisation
+        approach.  This method isn't very sexy, just (i) reads the data, (ii)
+        iterates over the solution, updating the linearisation point and calls
+        the solver a few times. Most of the work is done by the methods that
+        are being called from withing, but the structure is less confusing.
+        There are some things missing, such as a "robust" method and I am yet
+        to add the correction to the Hessian at the end of the method just
+         before it returns to the caller."""
+
+        # Read the relevant data for cufrent timestep and band
+        data = self.observations.get_band_data(timestep, band)
+        not_converged = True
+        # Linearisation point is set to x_forecast for first iteration
+        x_prev = x_forecast*1.
+        n_iter = 1
+        while not_converged:
+            # Create H matrix
+            H_matrix = self._create_observation_operator(self.n_params,
+                                                         data.emulator,
+                                                         data.metadata,
+                                                         data.mask,
+                                                         self.state_mask,
+                                                         x_prev,
+                                                         band)
+            x_analysis, P_analysis, P_analysis_inverse, \
+                innovations = self._solver(
+                    data.observations, data.mask, H_matrix, x_forecast,
+                    P_forecast, P_forecast_inverse, data.uncertainty,
+                    data.metadata)
+
+            # Test convergence. We calculate the l2 norm of the difference
+            # between the state at the previous iteration and the current one
+            # There might be better tests, but this is quite straightforward
+            passer_mask = data.mask[self.state_mask]
+            maska = np.concatenate([passer_mask.ravel()
+                                    for i in xrange(self.n_params)])
+            convergence_norm = np.linalg.norm(x_analysis[maska] -
+                                              x_prev[maska])/float(maska.sum())
+            LOG.info(
+                "Band {:d}, Iteration # {:d}, convergence norm: {:g}".format(
+                    band, n_iter, convergence_norm))
+            if (convergence_norm < convergence_tolerance) and (
+                    n_iter >= min_iterations):
+                # Converged!
+                not_converged = False
+            elif n_iter > 25:
+                # Too many iterations
+                LOG.warning("Bailing out after 25 iterations!!!!!!")
+                not_converged = False
+
+            x_prev = x_analysis
+            n_iter += 1
+        # Correct hessian for higher order terms
+        P_correction = hessian_correction(data.emulator, x_analysis,
+                                          P_analysis_inverse, innovations,
+                                          data.mask, self.state_mask, band,
+                                          self.n_params)
+        P_analysis_inverse = P_analysis_inverse - P_correction
+        # P_analysis_inverse = UPDATE HESSIAN WITH HIGHER ORDER CONTRIBUTION
+        return x_analysis, P_analysis, P_analysis_inverse, innovations
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
                P_forecast_inv, R_mat, the_metadata):
