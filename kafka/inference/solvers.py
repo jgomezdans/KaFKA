@@ -66,11 +66,12 @@ def variational_kalman( observations, mask, state_mask, uncertainty, H_matrix, n
     x_analysis = AI.solve (b)
     # So retval is the solution vector and A is the Hessian 
     # (->inv(A) is posterior cov)
-    innovations = y - H_matrix.dot(x_analysis)
+    fwd_modelled = H_matrix.dot(x_analysis)
+    innovations = y - fwd_modelled
     
     LOG.info("Inflating analysis state")
     #x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
     #                                    mask.ravel(), n_params=n_params)
     
-    return x_analysis, None, A, innovations
+    return x_analysis, None, A, innovations, fwd_modelled
     
