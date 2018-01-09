@@ -30,13 +30,13 @@ import scipy.sparse as sp
 # from scipy.spatial.distance import squareform, pdist
 
 # from utils import  matrix_squeeze, spsolve2, reconstruct_array
-from .utils import variational_kalman
-from .utils import locate_in_lut, run_emulator, create_uncertainty
-from .utils import create_linear_observation_operator
-from .utils import create_nonlinear_observation_operator
-from .utils import iterate_time_grid
-from .kf_tools import propagate_information_filter_LAI # eg
-from .kf_tools import hessian_correction
+from inference import variational_kalman
+from inference import locate_in_lut, run_emulator, create_uncertainty
+from inference import create_linear_observation_operator
+from inference import create_nonlinear_observation_operator
+from inference import iterate_time_grid
+from inference import propagate_information_filter_LAI # eg
+from inference import hessian_correction
 
 # Set up logging
 
