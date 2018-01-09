@@ -294,6 +294,25 @@ class BHRObservations(RetrieveBRDFDescriptors):
         bhr_data = BHR_data(bhr, mask, R_mat_sp, None, self.emulator)
         return bhr_data
 
+    
+class BHRObservationsTest(object):
+    """A class to test BHR data "one pixel at a time". In essence, one only needs
+    to define a self.dates dictionary (keys are datetime objects), and a 2 element
+    list or array with the VIS/NIR albedo. then we need the get_band_method..."""
+    def __init__(self, dates, vis_albedo, nir_albedo):
+        assert (len(dates) == len(vis_albedo))
+        assert (len(dates) == len(nir_albedo))
+        self.dates = {}
+        for ii, the_date in enumerate(dates):
+            self.dates[the_date] = [vis_albedo[ii], nir_albedo[ii]]
+    
+    def get_band_data(self, the_date, band_no):
+        bhr = self.dates[the_date][band_no]
+        mask = np.array(1, dtype=np.bool)
+        R_mat = 1./(np.maximum(2.5e-3, bhr * 0.05))**2
+        
+    
+        
 
 class KafkaOutput(object):
     """A very simple class to output the state."""
