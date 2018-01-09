@@ -29,8 +29,8 @@ def hessian_correction_pixel(gp, x0, C_obs_inv, innovation, band, nparams):
     return big_Hessian_corr
 
 
-def hessian_correction(gp, x0,P_inv, innovation, mask, state_mask, band, nparams):
-    C_obs_inv = P_inv.diagonal()[state_mask.flatten()]
+def hessian_correction(gp, x0, C_obs_inv, innovation, mask, state_mask, band, nparams):
+    C_obs_inv = C_obs_inv.diagonal()[state_mask.flatten()]
     mask = mask[state_mask].flatten()
     little_hess = []
     for i, (innov, C, m) in enumerate(zip(innovation, C_obs_inv, mask)):
