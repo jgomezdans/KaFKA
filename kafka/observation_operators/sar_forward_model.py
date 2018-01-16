@@ -2,11 +2,13 @@
 """
 
 """
+import logging
 
 import numpy as np
 
 import scipy.sparse as sp
 
+LOG = logging.getLogger(__name__)
 
 def sar_observation_operator(x, polarisation):
 
@@ -49,7 +51,7 @@ def sar_observation_operator(x, polarisation):
     # conversion of incidence angle to radiant
     # the incidence angle itself should probably implemented in x)
     theta = np.deg2rad(23.)
-    theta = np.deg2rad(np.arange(1.,80.))
+    theta = np.deg2rad(np.arange(1., 80.))
 
     # Simpler definition of cosine of theta
     mu = np.cos(theta)
@@ -78,12 +80,12 @@ def sar_observation_operator(x, polarisation):
     for i in range(n_elems):
         tau_value = np.exp(-2 * B / mu * x[0, i])
         grad[0, i] = A * E * mu * (x[0, i] ** (E - 1)) * (1 - tau_value) + \
-            2 * A * B * (x[0, i] ** E) * tau_value - (\
-            (2 ** (1/10. * (C + D * x[1, i]) + 1)) * \
-            (5 ** (1/10. * (C + D * x[1, i])) * B * tau_value) \
+            2 * A * B * (x[0, i] ** E) * tau_value - (
+            (2 ** (1/10. * (C + D * x[1, i]) + 1)) *
+            (5 ** (1/10. * (C + D * x[1, i])) * B * tau_value)
             ) / mu
-        grad[1, i] = D * np.log(10) * tau_value * 10 ** (1/10. * (C + D * x[1, i]) - 1)
-
+        grad[1, i] = D * np.log(10) * tau_value * 10 ** (
+            1/10. * (C + D * x[1, i]) - 1)
 
     # returned values are linear scaled not dB!!!
     # return sigma_0, grad, sigma_veg, sigma_surf, tau
@@ -91,7 +93,7 @@ def sar_observation_operator(x, polarisation):
 
 
 def create_sar_observation_operator(n_params, forward_model, metadata,
-                                          mask, state_mask,  x_forecast, band):
+                                    mask, state_mask,  x_forecast, band):
     """Creates the SAR observation operator using the Water Cloud SAR forward
     model (defined above).
 
@@ -119,11 +121,10 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     """
     LOG.info("Creating the ObsOp for band %d" % band)
     n_times = x_forecast.shape[0] / n_params
-    good_obs = mask.sum()
+    # good_obs = mask.sum()
     H_matrix = sp.lil_matrix((n_times, n_params * n_times),
                              dtype=np.float32)
     H0 = np.zeros(n_times, dtype=np.float32)
-
 
     # So the model has spectral components.
     if band == 0:
@@ -132,8 +133,6 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     elif band == 1:
         # VH
         polarisation = "VH"
-
-
     # This loop can be JIT'ed
     x0 = np.zeros((n_times, n_params))
     for i, m in enumerate(mask[state_mask].flatten()):
@@ -154,7 +153,6 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
             H0[i] = H0_[n]
             n += 1
     LOG.info("\tDone!")
-
     return (H0, H_matrix.tocsr())
 
     # # Calculate Gradient without conversion of sigma_soil from dB to linear
