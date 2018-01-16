@@ -99,7 +99,7 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     -----------
     n_params: int
         Number of parameters in the state vector per pixel
-    emulator: function
+    forward_model: function
         The function to call the forward model. Defined above
     metadata: list
         Not used
@@ -143,7 +143,7 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     # Calls the run_emulator method that only does different vectors
     # It might be here that we do some sort of clustering
 
-    H0_, dH = sar_observation_operator(x0[mask[state_mask]], polarisation)
+    H0_, dH = forward_model(x0[mask[state_mask]], polarisation)
 
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too
