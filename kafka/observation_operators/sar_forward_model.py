@@ -4,7 +4,9 @@
 """
 
 import numpy as np
-import pdb
+
+import scipy.sparse as sp
+
 
 def sar_observation_operator(x, polarisation):
 
