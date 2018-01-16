@@ -88,14 +88,33 @@ def sar_observation_operator(x, polarisation):
     return sigma_0, grad
 
 
-def create_nonlinear_observation_operator(n_params, emulator, metadata,
+def create_sar_observation_operator(n_params, forward_model, metadata,
                                           mask, state_mask,  x_forecast, band):
-    """Using an emulator of the nonlinear model around `x_forecast`.
-    This case is quite special, as I'm focusing on a BHR SAIL
-    version (or the JRC TIP), which have spectral parameters
-    (e.g. leaf single scattering albedo in two bands, etc.). This
-    is achieved by using the `state_mapper` to select which bits
-    of the state vector (and model Jacobian) are used."""
+    """Creates the SAR observation operator using the Water Cloud SAR forward
+    model (defined above).
+
+    Parameters
+    -----------
+    n_params: int
+        Number of parameters in the state vector per pixel
+    emulator: function
+        The function to call the forward model. Defined above
+    metadata: list
+        Not used
+    mask: array
+        A 2D mask with the observational valid pixels
+    state_mask: array
+        A 2D mask with the pixels that will be used for state inference
+    x_forecast: array
+        The state vector around which the linearisation will be done. Order is
+        parameters per pixel (e.g. LAI1, SM1, LAI2, SM2, ..., LAIN, SMN)
+    band: array
+        The band number. Assumed 0 is VV and 1 is VH.
+
+    Returns
+    --------
+    H0, dH
+    """
     LOG.info("Creating the ObsOp for band %d" % band)
     n_times = x_forecast.shape[0] / n_params
     good_obs = mask.sum()
