@@ -30,13 +30,13 @@ class S1Observations(object):
         # 1. Find the files
         files = glob.glob(os.path.join(data_folder, '*.nc'))
         files.sort()
-        self.observation_dates = {}
+        self.dates = {}
         for fich in files:
             fname = os.path.basename(fich)
             splitter = fname.split('_')
             this_date = datetime.datetime.strptime(splitter[5],
                                                    '%Y%m%dT%H%M%S')
-            self.observation_dates[this_date] = fich
+            self.dates[this_date] = fich
 
         # 2. Store the emulator(s)
         self.emulators = emulators
@@ -129,10 +129,15 @@ class S1Observations(object):
             polarisation = 'VV'
         elif band == 1:
             polarisation = 'VH'
-        this_file = self.observation_dates[timestep]
+        this_file = self.dates[timestep]
         observations = self._read_backscatter(this_file, polarisation)
         uncertainty = self._calculate_uncertainty(observations)
         mask = self._get_mask(observations)
         emulator = self.emulators[polarisation]
         sardata = SARdata(observations, uncertainty, mask, None, emulator)
         return sardata
+
+
+if __name__ == "__main__":
+    data_folder = "/media/ucfajlg/WERKLY/jose/new/"
+    sentinel1 = S1Observations(data_folder)
