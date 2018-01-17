@@ -6,6 +6,7 @@ requirements = [
     'pytest',
     'numpy',
     'scipy'
+    'gdal'
 ]
 
 setup(name='multiply-KaFKA-inference-engine',
