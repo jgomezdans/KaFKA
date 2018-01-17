@@ -7,6 +7,8 @@ requirements = [
     'numpy',
     'scipy',
     'gdal'
+    'BRDF_descriptors'
+    'matplotlib'
 ]
 
 setup(name='KaFKA',
