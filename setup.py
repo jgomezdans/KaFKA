@@ -6,8 +6,8 @@ requirements = [
     'pytest',
     'numpy',
     'scipy',
-    'gdal'
-    'BRDF_descriptors'
+    'gdal',
+    'BRDF_descriptors',
     'matplotlib'
 ]
 
