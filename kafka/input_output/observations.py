@@ -299,20 +299,47 @@ class BHRObservationsTest(object):
     """A class to test BHR data "one pixel at a time". In essence, one only needs
     to define a self.dates dictionary (keys are datetime objects), and a 2 element
     list or array with the VIS/NIR albedo. then we need the get_band_method..."""
-    def __init__(self, dates, vis_albedo, nir_albedo):
+    def __init__(self, emulator, dates, vis_albedo, nir_albedo):
         assert (len(dates) == len(vis_albedo))
         assert (len(dates) == len(nir_albedo))
-        self.dates = {}
+        self.emulator = self._get_emulator(emulator)
+        self.dates = dates
+        self.data = {}
         for ii, the_date in enumerate(dates):
-            self.dates[the_date] = [vis_albedo[ii], nir_albedo[ii]]
-    
+            self.data[the_date] = [vis_albedo[ii], nir_albedo[ii]]
+        
+            
+    def _get_emulator(self, emulator):
+        if not os.path.exists(emulator):
+            raise IOError("The emulator {} doesn't exist!".format(emulator))
+        # Assuming emulator is in an pickle file...
+        return cPickle.load(open(emulator, 'rb'))
+
+
     def get_band_data(self, the_date, band_no):
-        bhr = self.dates[the_date][band_no]
-        mask = np.array(1, dtype=np.bool)
+        bhr = self.data[the_date][band_no]
+        mask = np.ones((1,1), dtype=np.bool)
         R_mat = 1./(np.maximum(2.5e-3, bhr * 0.05))**2
+        R_mat_sp = sp.lil_matrix((1,1))
+        R_mat_sp.setdiag(R_mat)
+        R_mat_sp = R_mat_sp.tocsr()
+
+
+        bhr_data = BHR_data(bhr, mask, R_mat_sp, None, self.emulator)
+        return bhr_data
         
     
-        
+class KafkaOutputBHRTest(object):
+    """A very simple class to output the state."""
+    def __init__(self):
+        self.output = {}
+    def dump_data(self, timestep, x_analysis, P_analysis, P_analysis_inv,
+                  state_mask):
+        solution = {}
+        for ii, param in enumerate(["w_vis", "x_vis", "a_vis",
+                                    "w_nir", "x_nir", "a_nir", "TeLAI"]):
+            solution[param] = x_analysis[ii::7]
+        self.output[timestep] = solution        
 
 class KafkaOutput(object):
     """A very simple class to output the state."""
