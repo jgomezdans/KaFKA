@@ -11,17 +11,45 @@ import gdal
 
 import numpy as np
 
+import osr
+
 WRONG_VALUE = -999.0  # TODO tentative missing value
 
 SARdata = namedtuple('SARdata',
                      'observations uncertainty mask metadata emulator')
 
 
+def reproject_image(source_img, target_img, dstSRSs=None):
+    """Reprojects/Warps an image to fit exactly another image.
+    Additionally, you can set the destination SRS if you want
+    to or if it isn't defined in the source image."""
+    g = gdal.Open(target_img)
+    geo_t = g.GetGeoTransform()
+    x_size, y_size = g.RasterXSize, g.RasterYSize
+    xmin = min(geo_t[0], geo_t[0] + x_size * geo_t[1])
+    xmax = max(geo_t[0], geo_t[0] + x_size * geo_t[1])
+    ymin = min(geo_t[3], geo_t[3] + y_size * geo_t[5])
+    ymax = max(geo_t[3], geo_t[3] + y_size * geo_t[5])
+    xRes, yRes = abs(geo_t[1]), abs(geo_t[5])
+    if dstSRSs is None:
+        dstSRS = osr.SpatialReference()
+        raster_wkt = g.GetProjection()
+        dstSRS.ImportFromWkt(raster_wkt)
+    else:
+        dstSRS = dstSRSs
+    g = gdal.Warp('', source_img, format='MEM',
+                  outputBounds=[xmin, ymin, xmax, ymax], xRes=xRes, yRes=yRes,
+                  dstSRS=dstSRS)
+    if g is None:
+        raise ValueError("Something failed with GDAL!")
+    return g
+
+
 class S1Observations(object):
     """
     """
 
-    def __init__(self, data_folder,
+    def __init__(self, data_folder, state_mask,
                  emulators={'VV': 'SOmething', 'VH': 'Other'}):
 
         """
@@ -30,6 +58,7 @@ class S1Observations(object):
         # 1. Find the files
         files = glob.glob(os.path.join(data_folder, '*.nc'))
         files.sort()
+        self.state_mask = state_mask
         self.dates = {}
         for fich in files:
             fname = os.path.basename(fich)
@@ -41,7 +70,7 @@ class S1Observations(object):
         # 2. Store the emulator(s)
         self.emulators = emulators
 
-    def _read_backscatter(self, fname, polarisation):
+    def _read_backscatter(self, obs_ptr):
         """
         Read backscatter from NetCDF4 File
         Should return a 2D array that should overlap with the "state grid"
@@ -56,9 +85,7 @@ class S1Observations(object):
         backscatter values stored within NetCDF4 file for given polarisation
 
         """
-        fpath = 'NETCDF:"{:s}":sigma0_{:s}'.format(fname, polarisation)
-        g = gdal.Open(fpath)
-        backscatter = g.ReadAsArray()
+        backscatter = obs_ptr.ReadAsArray()
         return backscatter
 
     def _calculate_uncertainty(self, backscatter):
@@ -130,10 +157,14 @@ class S1Observations(object):
         elif band == 1:
             polarisation = 'VH'
         this_file = self.dates[timestep]
-        observations = self._read_backscatter(this_file, polarisation)
+        fname = 'NETCDF:"{:s}":sigma0_{:s}'.format(this_file, polarisation)
+        obs_ptr = reproject_image(fname, self.state_mask)
+        observations = self._read_backscatter(obs_ptr)
         uncertainty = self._calculate_uncertainty(observations)
         mask = self._get_mask(observations)
         emulator = self.emulators[polarisation]
+        # TODO read in angle of incidence from netcdf file
+        # metadata['incidence_angle_deg'] =
         sardata = SARdata(observations, uncertainty, mask, None, emulator)
         return sardata
 

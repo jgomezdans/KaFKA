@@ -50,6 +50,7 @@ def sar_observation_operator(x, polarisation):
 
     # conversion of incidence angle to radiant
     # the incidence angle itself should probably implemented in x)
+    # TODO needs to come from the data
     theta = np.deg2rad(23.)
     theta = np.deg2rad(np.arange(1., 80.))
 
