@@ -8,6 +8,7 @@ requirements = [
     'scipy'
     'gdal'
     'BRDF_descriptors'
+    'matplotlib'
 ]
 
 setup(name='multiply-KaFKA-inference-engine',
