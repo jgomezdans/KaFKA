@@ -5,15 +5,13 @@ from setuptools import setup
 requirements = [
     'pytest',
     'numpy',
-    'scipy'
+    'scipy',
     'gdal'
 ]
 
-setup(name='multiply-KaFKA-inference-engine',
+setup(name='KaFKA',
       description='MULTIPLY KaFKA inference engine',
       author='MULTIPLY Team',
-      packages=['kafka',
-                 'inference',
-                 'input_output'],
+      packages=['kafka'],
       install_requires=requirements
 )
