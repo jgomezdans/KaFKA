@@ -10,7 +10,7 @@ import scipy.sparse as sp
 
 LOG = logging.getLogger(__name__)
 
-def sar_observation_operator(x, polarisation):
+def sar_observation_operator(x, theta, polarisation):
 
     """
     For the sar_observation_operator a simple Water Cloud Model (WCM) is used
@@ -51,8 +51,7 @@ def sar_observation_operator(x, polarisation):
     # conversion of incidence angle to radiant
     # the incidence angle itself should probably implemented in x)
     # TODO needs to come from the data
-    theta = np.deg2rad(23.)
-    theta = np.deg2rad(np.arange(1., 80.))
+    theta = np.deg2rad(theta)
 
     # Simpler definition of cosine of theta
     mu = np.cos(theta)
@@ -140,10 +139,11 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
         if m:
             x0[i, :] = x_forecast[(n_params * i): (n_params*(i+1))]
     LOG.info("Running SAR forward model")
+    theta = metadata['incidence_angle'][mask[state_mask]]
     # Calls the run_emulator method that only does different vectors
     # It might be here that we do some sort of clustering
 
-    H0_, dH = forward_model(x0[mask[state_mask]], polarisation)
+    H0_, dH = forward_model(x0[mask[state_mask]], theta, polarisation)
 
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too

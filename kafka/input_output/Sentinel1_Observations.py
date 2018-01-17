@@ -165,7 +165,10 @@ class S1Observations(object):
         emulator = self.emulators[polarisation]
         # TODO read in angle of incidence from netcdf file
         # metadata['incidence_angle_deg'] =
-        sardata = SARdata(observations, uncertainty, mask, None, emulator)
+        fname = 'NETCDF:"{:s}":{:s}'.format(this_file, "theta")
+        obs_ptr = reproject_image(fname, self.state_mask)
+        metadata = {'incidence_angle': obs_ptr.ReadAsArray()}
+        sardata = SARdata(observations, uncertainty, mask, metadata, emulator)
         return sardata
 
 
