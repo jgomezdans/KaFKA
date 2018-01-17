@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 requirements = [
     'pytest',
@@ -14,6 +14,6 @@ requirements = [
 setup(name='KaFKA',
       description='MULTIPLY KaFKA inference engine',
       author='MULTIPLY Team',
-      packages=['kafka'],
+      packages=find_packages(),
       install_requires=requirements
 )
