@@ -67,9 +67,9 @@ def sar_observation_operator(x, theta, polarisation):
         raise ValueError('Only VV and VH polarisations available!')
 
     # Calculate Model
-    tau = np.exp(-2 * B / mu * x[0, :])
-    sigma_veg = A * (x[0, :] ** E) * mu * (1 - tau)
-    sigma_surf = 10 ** ((C + D * x[1, :]) / 10.)
+    tau = np.exp(-2 * B / mu * x[:, 0])
+    sigma_veg = A * (x[:, 0] ** E) * mu * (1 - tau)
+    sigma_surf = 10 ** ((C + D * x[:, 1]) / 10.)
 
     sigma_0 = sigma_veg + tau * sigma_surf
     #pdb.set_trace()
@@ -78,14 +78,14 @@ def sar_observation_operator(x, theta, polarisation):
     grad = x*0
     n_elems = x.shape[1]
     for i in range(n_elems):
-        tau_value = np.exp(-2 * B / mu * x[0, i])
-        grad[0, i] = A * E * mu * (x[0, i] ** (E - 1)) * (1 - tau_value) + \
-            2 * A * B * (x[0, i] ** E) * tau_value - (
-            (2 ** (1/10. * (C + D * x[1, i]) + 1)) *
-            (5 ** (1/10. * (C + D * x[1, i])) * B * tau_value)
-            ) / mu
-        grad[1, i] = D * np.log(10) * tau_value * 10 ** (
-            1/10. * (C + D * x[1, i]) - 1)
+        tau_value = np.exp(-2 * B / mu[i] * x[i, 0])
+        grad[i, 0] = A * E * mu[i] * (x[i, 0] ** (E - 1)) * (1 - tau_value) + \
+            2 * A * B * (x[i, 0] ** E) * tau_value - (
+            (2 ** (1/10. * (C + D * x[i, 1]) + 1)) *
+            (5 ** (1/10. * (C + D * x[i, 1])) * B * tau_value)
+            ) / mu[i]
+        grad[i, 1] = D * np.log(10) * tau_value * 10 ** (
+            1/10. * (C + D * x[i, 1]) - 1)
 
     # returned values are linear scaled not dB!!!
     # return sigma_0, grad, sigma_veg, sigma_surf, tau
@@ -135,11 +135,12 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
         polarisation = "VH"
     # This loop can be JIT'ed
     x0 = np.zeros((n_times, n_params))
+    theta = np.zeros((n_times))
     for i, m in enumerate(mask[state_mask].flatten()):
         if m:
             x0[i, :] = x_forecast[(n_params * i): (n_params*(i+1))]
+            theta[i] = 23.#metadata['incidence_angle']
     LOG.info("Running SAR forward model")
-    theta = metadata['incidence_angle'][mask[state_mask]]
     # Calls the run_emulator method that only does different vectors
     # It might be here that we do some sort of clustering
 

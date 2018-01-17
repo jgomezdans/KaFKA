@@ -13,6 +13,8 @@ import numpy as np
 
 import osr
 
+import scipy.sparse as sp
+
 WRONG_VALUE = -999.0  # TODO tentative missing value
 
 SARdata = namedtuple('SARdata',
@@ -59,14 +61,15 @@ class S1Observations(object):
         files = glob.glob(os.path.join(data_folder, '*.nc'))
         files.sort()
         self.state_mask = state_mask
-        self.dates = {}
+        self.dates = []
+        self.date_data = {}
         for fich in files:
             fname = os.path.basename(fich)
             splitter = fname.split('_')
             this_date = datetime.datetime.strptime(splitter[5],
                                                    '%Y%m%dT%H%M%S')
-            self.dates[this_date] = fich
-
+            self.dates.append(this_date)
+            self.date_data[this_date] = fich
         # 2. Store the emulator(s)
         self.emulators = emulators
 
@@ -108,12 +111,13 @@ class S1Observations(object):
         """
 
         # first approximation of uncertainty (1 dB)
-        self.unc = 1.
+        unc = backscatter*0.05
+
 
         # need to find a good way to calculate ENL
         # self.ENL = (backscatter.mean()**2) / (backscatter.std()**2)
 
-        return self.unc
+        return unc
 
     def _get_mask(self, backscatter):
         """
@@ -131,7 +135,8 @@ class S1Observations(object):
 
         """
 
-        mask = np.where(backscatter == WRONG_VALUE)
+        mask = np.ones_like(backscatter, dtype=np.bool)
+        mask[backscatter == WRONG_VALUE] = False
         return mask
 
     def get_band_data(self, timestep, band):
@@ -156,19 +161,27 @@ class S1Observations(object):
             polarisation = 'VV'
         elif band == 1:
             polarisation = 'VH'
-        this_file = self.dates[timestep]
+        this_file = self.date_data[timestep]
         fname = 'NETCDF:"{:s}":sigma0_{:s}'.format(this_file, polarisation)
         obs_ptr = reproject_image(fname, self.state_mask)
         observations = self._read_backscatter(obs_ptr)
         uncertainty = self._calculate_uncertainty(observations)
         mask = self._get_mask(observations)
+        R_mat = np.zeros_like(observations)
+        R_mat = uncertainty
+        R_mat[np.logical_not(mask)] = 0.
+        N = mask.ravel().shape[0]
+        R_mat_sp = sp.lil_matrix((N, N))
+        R_mat_sp.setdiag(1./(R_mat.ravel())**2)
+        R_mat_sp = R_mat_sp.tocsr()
+
         emulator = self.emulators[polarisation]
         # TODO read in angle of incidence from netcdf file
         # metadata['incidence_angle_deg'] =
         fname = 'NETCDF:"{:s}":{:s}'.format(this_file, "theta")
         obs_ptr = reproject_image(fname, self.state_mask)
         metadata = {'incidence_angle': obs_ptr.ReadAsArray()}
-        sardata = SARdata(observations, uncertainty, mask, metadata, emulator)
+        sardata = SARdata(observations, R_mat_sp, mask, metadata, emulator)
         return sardata
 
 

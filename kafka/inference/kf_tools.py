@@ -20,7 +20,10 @@ def band_selecta(band):
 
 def hessian_correction_pixel(gp, x0, C_obs_inv, innovation, band, nparams):
     selecta = band_selecta(band)
-    ddH = gp.hessian(np.atleast_2d(x0[selecta]))
+    try:
+        ddH = gp.hessian(np.atleast_2d(x0[selecta]))
+    except AttributeError:
+        return 0. # In case the hessian is not implemented
     big_ddH = np.zeros((nparams, nparams))
     for i, ii in enumerate(selecta):
         for j, jj in enumerate(selecta):
