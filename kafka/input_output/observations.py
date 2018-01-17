@@ -49,7 +49,10 @@ import gdal
 
 import numpy as np
 
-from BRDF_descriptors import RetrieveBRDFDescriptors
+try:
+    from BRDF_descriptors import RetrieveBRDFDescriptors
+except ImportError:
+    from BRDF-descriptors import RetrieveBRDFDescriptors
 
 #from kernels import Kernels
 
