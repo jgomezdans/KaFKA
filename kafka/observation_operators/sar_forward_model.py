@@ -67,25 +67,25 @@ def sar_observation_operator(x, theta, polarisation):
         raise ValueError('Only VV and VH polarisations available!')
 
     # Calculate Model
-    tau = np.exp(-2 * B / mu * x[:, 0])
-    sigma_veg = A * (x[:, 0] ** E) * mu * (1 - tau)
-    sigma_surf = 10 ** ((C + D * x[:, 1]) / 10.)
+    tau = np.exp(-2. * B / mu * x[:, 0])
+    sigma_veg = A * (x[:, 0] ** E) * mu * (1. - tau)
+    sigma_surf = 10. ** ((C + D * x[:, 1]) / 10.)
 
     sigma_0 = sigma_veg + tau * sigma_surf
     #pdb.set_trace()
 
     # Calculate Gradient (grad has same dimension as x)
     grad = x*0
-    n_elems = x.shape[1]
+    n_elems = x.shape[0]
     for i in range(n_elems):
-        tau_value = np.exp(-2 * B / mu[i] * x[i, 0])
-        grad[i, 0] = A * E * mu[i] * (x[i, 0] ** (E - 1)) * (1 - tau_value) + \
-            2 * A * B * (x[i, 0] ** E) * tau_value - (
-            (2 ** (1/10. * (C + D * x[i, 1]) + 1)) *
-            (5 ** (1/10. * (C + D * x[i, 1])) * B * tau_value)
+        tau_value = np.exp(-2. * B / mu[i] * x[i, 0])
+        grad[i, 0] = A * E * mu[i] * (x[i, 0] ** (E - 1.)) * (1. - tau_value) + \
+            2. * A * B * (x[i, 0] ** E) * tau_value - (
+            (2. ** (1/10. * (C + D * x[i, 1]) + 1.)) *
+            (5. ** (1/10. * (C + D * x[i, 1])) * B * tau_value)
             ) / mu[i]
-        grad[i, 1] = D * np.log(10) * tau_value * 10 ** (
-            1/10. * (C + D * x[i, 1]) - 1)
+        grad[i, 1] = D * np.log(10.) * tau_value * 10. ** (
+            1./10. * (C + D * x[i, 1]) - 1.)
 
     # returned values are linear scaled not dB!!!
     # return sigma_0, grad, sigma_veg, sigma_surf, tau
@@ -149,6 +149,7 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too
     n = 0
+    
     for i, m in enumerate(mask[state_mask].flatten()):
         if m:
             H_matrix[i, (n_params * i): (n_params*(i+1))] = dH[n]
