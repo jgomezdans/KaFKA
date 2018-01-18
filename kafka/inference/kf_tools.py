@@ -10,6 +10,11 @@ import scipy.sparse.linalg as spl
 
 from utils import block_diag
 
+class NoHessianMethod(Exception):
+    """An exception triggered when the forward model isn't able to provide an
+    estimation of the Hessian"""
+    def __init__(self, message):
+        self.message = message
 
 def band_selecta(band):
     if band == 0:
@@ -33,6 +38,10 @@ def hessian_correction(gp, x0, R_mat, innovation, mask, state_mask, band,
                        nparams):
     """Calculates higher order Hessian correction for the likelihood term.
     Needs the GP, the Observational uncertainty, the mask...."""
+    if not hasattr(gp, "hessian"):
+        # The observation operator does not provide a Hessian method. We just
+        # return 0, meaning no Hessian correction.
+        return 0.
     C_obs_inv = R_mat.diagonal()[state_mask.flatten()]
     mask = mask[state_mask].flatten()
     little_hess = []
@@ -59,12 +68,13 @@ def tip_prior():
     Returns
     -------
     The mean prior vector, covariance and inverse covariance matrices."""
-    sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.5]) # broadly TLAI 0->7 for 1sigma
+    # broadly TLAI 0->7 for 1sigma
+    sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.5])
     x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, np.exp(-0.5*1.5)])
     # The individual covariance matrix
-    little_p = np.diag ( sigma**2).astype(np.float32)
-    little_p[5,2] = 0.8862*0.0959*0.2
-    little_p[2,5] = 0.8862*0.0959*0.2
+    little_p = np.diag(sigma**2).astype(np.float32)
+    little_p[5, 2] = 0.8862*0.0959*0.2
+    little_p[2, 5] = 0.8862*0.0959*0.2
 
     inv_p = np.linalg.inv(little_p)
     return x0, little_p, inv_p
