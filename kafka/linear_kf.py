@@ -61,7 +61,7 @@ class LinearKalman (object):
     def __init__(self, observations, output, state_mask,
                  state_propagation=propagate_information_filter_LAI,
                  linear=True, n_params=1, diagnostics=True,
-                 bands_per_observation=1):
+                 bands_per_observation=1, prior=None):
         """The class creator takes (i) an observations object, (ii) an output
         writer object, (iii) the state mask (a boolean 2D array indicating which
         pixels are used in the inference), and additionally, (iv) a state
@@ -78,6 +78,7 @@ class LinearKalman (object):
         self.state_mask = state_mask
         self.n_state_elems = self.state_mask.sum()
         self._advance = state_propagation
+        self.prior = prior
         if linear:
             self._create_observation_operator = \
                                             create_linear_observation_operator
@@ -175,6 +176,7 @@ class LinearKalman (object):
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
                     x_analysis, P_analysis, P_analysis_inverse,
                     self.trajectory_model, self.trajectory_uncertainty)
+
             is_first = False
             if len(locate_times) == 0:
                 # Just advance the time
