@@ -51,6 +51,29 @@ def hessian_correction(gp, x0, R_mat, innovation, mask, state_mask, band,
     return hessian_corr
 
 
+def blend_prior(prior_mean, prior_cov_inverse, x_forecast, P_forecast_inverse):
+    """
+    combine prior mean and inverse covariance with the mean and inverse covariance
+    from the previous timestep as the product of gaussian distributions
+    :param prior_mean: 1D sparse array
+           The prior mean
+    :param prior_cov_inverse: sparse array
+           The inverse covariance matrix of the prior
+    :param x_forecast:
+
+    :param P_forecast_inverse:
+    :return: the combined mean and inverse covariance matrix
+    """
+    # calculate combined covariance
+    combined_cov_inv = P_forecast_inverse + prior_cov_inverse
+    b = P_forecast_inverse.dot(prior_mean) + x_forecast.dot(prior_cov_inverse)
+    # Solve for combined mean
+    AI = sp.linalg.splu(combined_cov_inv)
+    x_combined = AI.solve(b)
+
+    return x_combined, combined_cov_inv
+
+
 def tip_prior():
     """The JRC-TIP prior in a convenient function which is fun for the whole
     family. Note that the effective LAI is here defined in transformed space
@@ -68,6 +91,41 @@ def tip_prior():
 
     inv_p = np.linalg.inv(little_p)
     return x0, little_p, inv_p
+
+
+def getPrior(prior):
+    # This is yet to be properly defined. For now it will create the TIP prior and
+    # prior just contains the size of the array - this function will be replaced with
+    # the real code when we know what the priors look like.
+
+    if prior['type']='TIP':
+        x_prior, c_prior, c_inv_prior = tip_prior()
+        n_pixels = prior.n_pixels
+        mean = np.array([x_prior for i in xrange(n_pixels)]).flatten()
+        c_inv_prior_mat = [c_inv_prior for n in xrange(n_pixels)]
+        prior_cov_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
+    else:
+        mean = None
+        prior_cov_inverse=None
+    return mean, prior_cov_inverse
+
+
+def propagate_and_blend_prior(x_analysis, P_analysis, P_analysis_inverse,
+                              M_matrix, Q_matrix, prior):
+    # This needs a different signature to the other propagators in order to incorporate
+    # the prior so perhaps drop the P_analysis well?
+
+    # If we want to use this in place of the different propagates then we will
+    # need a new one for each change of propagate. Need to decide on a propagate method
+    # currently putting in SLOW  (LAI one needs the prior removed from it.
+    x_forecast, None, P_forecast_inverse, None = propagate_information_filter_SLOW(
+                     x_analysis, P_analysis, P_analysis_inverse, M_matrix, Q_matrix)
+
+    prior_mean, prior_cov_inverse = getPrior(prior) #Might this need band info?
+
+    x_combined, combined_cov_inv = blend_prior(prior_mean, prior_cov_inverse,
+                                               x_forecast, P_forecast_inverse)
+    return x_combined, None, combined_cov_inv
 
 
 def propagate_standard_kalman(x_analysis, P_analysis, P_analysis_inverse,
