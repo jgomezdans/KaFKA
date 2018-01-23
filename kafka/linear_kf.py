@@ -37,6 +37,7 @@ from inference import create_nonlinear_observation_operator
 from inference import iterate_time_grid
 from inference import propagate_information_filter_LAI # eg
 from inference import hessian_correction
+from inference.kf_tools import propagate_and_blend_prior
 
 # Set up logging
 
@@ -59,6 +60,7 @@ class LinearKalman (object):
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
     def __init__(self, observations, output, state_mask,
+                 create_observation_operator,
                  state_propagation=propagate_information_filter_LAI,
                  linear=True, n_params=1, diagnostics=True,
                  bands_per_observation=1, prior=None):
@@ -77,14 +79,13 @@ class LinearKalman (object):
         self.bands_per_observation = bands_per_observation
         self.state_mask = state_mask
         self.n_state_elems = self.state_mask.sum()
-        self._advance = state_propagation
+        self._state_propagator = state_propagation
+        self._advance = propagate_and_blend_prior
         self.prior = prior
-        if linear:
-            self._create_observation_operator = \
-                                            create_linear_observation_operator
-        else:
-            self._create_observation_operator = \
-                                        create_nonlinear_observation_operator
+        # this allows you to pass additional information with prior needed by
+        # specific functions. All priors need a dictionary with ['function'] key.
+        # Other keys are optional
+        self._create_observation_operator = create_observation_operator
         LOG.info("Starting KaFKA run!!!")
 
     def advance(self, x_analysis, P_analysis, P_analysis_inverse,
@@ -92,7 +93,8 @@ class LinearKalman (object):
         LOG.info("Calling state propagator...")
         x_forecast, P_forecast, P_forecast_inverse = \
             self._advance(x_analysis, P_analysis, P_analysis_inverse,
-                          trajectory_model, trajectory_uncertainty)
+                          trajectory_model, trajectory_uncertainty,
+                          self.prior, self._state_propagator)
         return x_forecast, P_forecast, P_forecast_inverse
 
     def _set_plot_view(self, diag_string, timestep, obs):
