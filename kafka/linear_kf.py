@@ -206,6 +206,12 @@ class LinearKalman (object):
                 x_analysis, P_analysis, P_analysis_inverse, innovations = \
                     self.assimilate_band(band, step, x_forecast, P_forecast,
                                          P_forecast_inverse)
+                # Once the band is assimilated, the posterior (i.e. analysis)
+                # becomes the prior (i.e. forecast)
+                x_forecast = x_analysis
+                P_forecast = P_analysis
+                P_forecast_inv = P_analysis_inverse
+
         self.previous_state = Previous_State(step, x_analysis,
                                              P_analysis, P_analysis_inverse)
 
