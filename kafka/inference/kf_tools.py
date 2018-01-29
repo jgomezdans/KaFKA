@@ -60,6 +60,29 @@ def hessian_correction(gp, x0, R_mat, innovation, mask, state_mask, band,
     return hessian_corr
 
 
+def blend_prior(prior_mean, prior_cov_inverse, x_forecast, P_forecast_inverse):
+    """
+    combine prior mean and inverse covariance with the mean and inverse covariance
+    from the previous timestep as the product of gaussian distributions
+    :param prior_mean: 1D sparse array
+           The prior mean
+    :param prior_cov_inverse: sparse array
+           The inverse covariance matrix of the prior
+    :param x_forecast:
+
+    :param P_forecast_inverse:
+    :return: the combined mean and inverse covariance matrix
+    """
+    # calculate combined covariance
+    combined_cov_inv = P_forecast_inverse + prior_cov_inverse
+    b = P_forecast_inverse.dot(prior_mean) + prior_cov_inverse.dot(x_forecast)
+    # Solve for combined mean
+    AI = sp.linalg.splu(combined_cov_inv.tocsc())
+    x_combined = AI.solve(b)
+
+    return x_combined, combined_cov_inv
+
+
 def tip_prior():
     """The JRC-TIP prior in a convenient function which is fun for the whole
     family. Note that the effective LAI is here defined in transformed space
@@ -79,9 +102,62 @@ def tip_prior():
     inv_p = np.linalg.inv(little_p)
     return x0, little_p, inv_p
 
+def tip_prior_noLAI(prior):
+    n_pixels = prior['n_pixels']
+    mean, prior_cov_inverse = tip_prior(prior)
+
+
+def tip_prior_full(prior):
+    # This is yet to be properly defined. For now it will create the TIP prior and
+    # prior just contains the size of the array - this function will be replaced with
+    # the real code when we know what the priors look like.
+    x_prior, c_prior, c_inv_prior = tip_prior()
+    n_pixels = prior['n_pixels']
+    mean = np.array([x_prior for i in xrange(n_pixels)]).flatten()
+    c_inv_prior_mat = [c_inv_prior for n in xrange(n_pixels)]
+    prior_cov_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
+
+    return mean, prior_cov_inverse
+
+
+def propagate_and_blend_prior(x_analysis, P_analysis, P_analysis_inverse,
+                              M_matrix, Q_matrix,
+                              prior=None, state_propagator=None, date=None):
+    """
+
+    :param x_analysis:
+    :param P_analysis:
+    :param P_analysis_inverse:
+    :param M_matrix:
+    :param Q_matrix:
+    :param prior: dictionay that must contain the key 'function' mapped to a
+    function that defines the prior and takes the prior dictionary as an argument
+    see tip_prior for example). Other dictionary items are optional arguments for
+    the prior.
+    :param state_propagator:
+    :return:
+    """
+    if state_propagator is not None:
+        x_forecast, P_forecast, P_forecast_inverse = state_propagator(
+                     x_analysis, P_analysis, P_analysis_inverse, M_matrix, Q_matrix)
+    if prior is not None:
+        prior_func = prior['function']
+        prior_mean, prior_cov_inverse = prior_func(prior)
+    if prior is not None and state_propagator is not None:
+        x_combined, combined_cov_inv = blend_prior(prior_mean, prior_cov_inverse,
+                                                   x_forecast, P_forecast_inverse)
+        return x_combined, None, combined_cov_inv
+    elif prior is not None:
+        return prior_mean, None, prior_cov_inverse
+    elif state_propagator is not None:
+        return x_forecast, P_forecast, P_forecast_inverse
+    else:
+        return None, None, None
+
 
 def propagate_standard_kalman(x_analysis, P_analysis, P_analysis_inverse,
-                              M_matrix, Q_matrix):
+                              M_matrix, Q_matrix,
+                              prior=None, state_propagator=None, date=None):
     """Standard Kalman filter state propagation using the state covariance
     matrix and a linear state transition model. This function returns `None`
     for the forecast inverse covariance matrix.
@@ -114,7 +190,8 @@ def propagate_standard_kalman(x_analysis, P_analysis, P_analysis_inverse,
 
 
 def propagate_information_filter_SLOW(x_analysis, P_analysis, P_analysis_inverse,
-                                 M_matrix, Q_matrix):
+                                      M_matrix, Q_matrix,
+                                      prior=None, state_propagator=None, date=None):
     """Information filter state propagation using the INVERSER state covariance
     matrix and a linear state transition model. This function returns `None`
     for the forecast covariance matrix (as this takes forever). This method is
@@ -151,8 +228,9 @@ def propagate_information_filter_SLOW(x_analysis, P_analysis, P_analysis_inverse
 
     return x_forecast, None, P_forecast_inverse
 
-def propagate_information_filter_SLOW(x_analysis, P_analysis, P_analysis_inverse,
-                                 M_matrix, Q_matrix):
+def propagate_information_filter_approx_SLOW(x_analysis, P_analysis, P_analysis_inverse,
+                                 M_matrix, Q_matrix,
+                                      prior=None, state_propagator=None, date=None):
     """Information filter state propagation using the INVERSER state covariance
     matrix and a linear state transition model. This function returns `None`
     for the forecast covariance matrix (as this takes forever). This method is
@@ -197,7 +275,8 @@ def propagate_information_filter_SLOW(x_analysis, P_analysis, P_analysis_inverse
 
 def propagate_information_filter_LAI(x_analysis, P_analysis,
                                      P_analysis_inverse,
-                                     M_matrix, Q_matrix):
+                                     M_matrix, Q_matrix,
+                                     prior=None, state_propagator=None, date=None):
 
 
     x_forecast = M_matrix.dot(x_analysis)
@@ -217,8 +296,9 @@ def propagate_information_filter_LAI(x_analysis, P_analysis,
     return x0, None, P_forecast_inverse
 
 def no_propagation(x_analysis, P_analysis,
-                                     P_analysis_inverse,
-                                     M_matrix, Q_matrix):
+                   P_analysis_inverse,
+                   M_matrix, Q_matrix,
+                   prior=None, state_propagator=None, date=None):
     """No propagation. In this case, we return the original prior. As the
     information filter behaviour is the standard behaviour in KaFKA, we
     only return the inverse covariance matrix. **NOTE** the input parameters

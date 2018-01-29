@@ -37,6 +37,7 @@ from inference import create_nonlinear_observation_operator
 from inference import iterate_time_grid
 from inference import propagate_information_filter_LAI # eg
 from inference import hessian_correction
+from inference.kf_tools import propagate_and_blend_prior
 
 # Set up logging
 
@@ -62,7 +63,7 @@ class LinearKalman (object):
                  create_observation_operator,
                  state_propagation=propagate_information_filter_LAI,
                  linear=True, n_params=1, diagnostics=True,
-                 bands_per_observation=1):
+                 bands_per_observation=1, prior=None):
         """The class creator takes (i) an observations object, (ii) an output
         writer object, (iii) the state mask (a boolean 2D array indicating which
         pixels are used in the inference), and additionally, (iv) a state
@@ -78,7 +79,12 @@ class LinearKalman (object):
         self.bands_per_observation = bands_per_observation
         self.state_mask = state_mask
         self.n_state_elems = self.state_mask.sum()
-        self._advance = state_propagation
+        self._state_propagator = state_propagation
+        self._advance = propagate_and_blend_prior
+        self.prior = prior
+        # this allows you to pass additional information with prior needed by
+        # specific functions. All priors need a dictionary with ['function'] key.
+        # Other keys are optional
         self._create_observation_operator = create_observation_operator
         LOG.info("Starting KaFKA run!!!")
 
@@ -87,7 +93,8 @@ class LinearKalman (object):
         LOG.info("Calling state propagator...")
         x_forecast, P_forecast, P_forecast_inverse = \
             self._advance(x_analysis, P_analysis, P_analysis_inverse,
-                          trajectory_model, trajectory_uncertainty)
+                          trajectory_model, trajectory_uncertainty,
+                          self.prior, self._state_propagator)
         return x_forecast, P_forecast, P_forecast_inverse
 
     def _set_plot_view(self, diag_string, timestep, obs):
@@ -171,6 +178,7 @@ class LinearKalman (object):
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
                     x_analysis, P_analysis, P_analysis_inverse,
                     self.trajectory_model, self.trajectory_uncertainty)
+
             is_first = False
             if len(locate_times) == 0:
                 # Just advance the time
