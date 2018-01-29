@@ -59,6 +59,7 @@ class LinearKalman (object):
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
     def __init__(self, observations, output, state_mask,
+                 create_observation_operator,
                  state_propagation=propagate_information_filter_LAI,
                  linear=True, n_params=1, diagnostics=True,
                  bands_per_observation=1):
@@ -78,12 +79,7 @@ class LinearKalman (object):
         self.state_mask = state_mask
         self.n_state_elems = self.state_mask.sum()
         self._advance = state_propagation
-        if linear:
-            self._create_observation_operator = \
-                                            create_linear_observation_operator
-        else:
-            self._create_observation_operator = \
-                                        create_nonlinear_observation_operator
+        self._create_observation_operator = create_observation_operator
         LOG.info("Starting KaFKA run!!!")
 
     def advance(self, x_analysis, P_analysis, P_analysis_inverse,
@@ -210,6 +206,12 @@ class LinearKalman (object):
                 x_analysis, P_analysis, P_analysis_inverse, innovations = \
                     self.assimilate_band(band, step, x_forecast, P_forecast,
                                          P_forecast_inverse)
+                # Once the band is assimilated, the posterior (i.e. analysis)
+                # becomes the prior (i.e. forecast)
+                x_forecast = x_analysis
+                P_forecast = P_analysis
+                P_forecast_inv = P_analysis_inverse
+
         self.previous_state = Previous_State(step, x_analysis,
                                              P_analysis, P_analysis_inverse)
 
