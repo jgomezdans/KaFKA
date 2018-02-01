@@ -121,7 +121,7 @@ def tip_prior_full(prior):
 
 
 def propagate_and_blend_prior(x_analysis, P_analysis, P_analysis_inverse,
-                              M_matrix, Q_matrix,
+                              M_matrix, Q_matrix, 
                               prior=None, state_propagator=None, date=None):
     """
 
@@ -141,8 +141,10 @@ def propagate_and_blend_prior(x_analysis, P_analysis, P_analysis_inverse,
         x_forecast, P_forecast, P_forecast_inverse = state_propagator(
                      x_analysis, P_analysis, P_analysis_inverse, M_matrix, Q_matrix)
     if prior is not None:
-        prior_func = prior['function']
-        prior_mean, prior_cov_inverse = prior_func(prior)
+        # Prior should call `process_prior` method of prior object
+        # this requires a list of parameters, the date and the state grid (a GDAL-
+        # readable file)
+        prior_mean, prior_cov_inverse = prior.process_prior(date, inv_cov=True)
     if prior is not None and state_propagator is not None:
         x_combined, combined_cov_inv = blend_prior(prior_mean, prior_cov_inverse,
                                                    x_forecast, P_forecast_inverse)
@@ -152,6 +154,7 @@ def propagate_and_blend_prior(x_analysis, P_analysis, P_analysis_inverse,
     elif state_propagator is not None:
         return x_forecast, P_forecast, P_forecast_inverse
     else:
+        # Clearly not getting a prior here
         return None, None, None
 
 

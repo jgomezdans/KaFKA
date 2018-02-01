@@ -60,9 +60,9 @@ class LinearKalman (object):
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
     def __init__(self, observations, output, state_mask,
-                 create_observation_operator,
+                 create_observation_operator,parameters_list,
                  state_propagation=propagate_information_filter_LAI,
-                 linear=True, n_params=1, diagnostics=True,
+                 linear=True, diagnostics=True,
                  bands_per_observation=1, prior=None):
         """The class creator takes (i) an observations object, (ii) an output
         writer object, (iii) the state mask (a boolean 2D array indicating which
@@ -72,7 +72,10 @@ class LinearKalman (object):
         the state vector, whether diagnostics are being reported, and the
         number of bands per observation.
         """
-        self.n_params = n_params
+        self.parameters_list = parameters_list # A list of parameter names
+                                     # Required by prior
+        self.n_params = len(self.parameters_list)
+    
         self.observations = observations
         self.output = output
         self.diagnostics = diagnostics
@@ -94,7 +97,8 @@ class LinearKalman (object):
         x_forecast, P_forecast, P_forecast_inverse = \
             self._advance(x_analysis, P_analysis, P_analysis_inverse,
                           trajectory_model, trajectory_uncertainty,
-                          self.prior, self._state_propagator)
+                          prior=self.prior, date=self.current_timestep,
+                          state_propagator=self._state_propagator)
         return x_forecast, P_forecast, P_forecast_inverse
 
     def _set_plot_view(self, diag_string, timestep, obs):
