@@ -255,7 +255,7 @@ class LinearKalman (object):
                 META.append(current_data[band].metadata)
             # Now call the solver 
             x_analysis, P_analysis, P_analysis_inverse, \
-                innovations, fwd_modelled = self.solver(
+                innovations, fwd_modelled = self.solver_multiband(
                     Y, MASK, H_matrix, x_forecast,
                     P_forecast, P_forecast_inverse, UNC,
                     UNC)
@@ -399,6 +399,20 @@ class LinearKalman (object):
         return x_analysis, P_analysis, P_analysis_inverse, innovations
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
+               P_forecast_inv, R_mat, the_metadata):
+
+        x_analysis, P_analysis, P_analysis_inv, \
+            innovations_prime, fwd_modelled = \
+            variational_kalman(
+                observations, mask, self.state_mask, R_mat, H_matrix,
+                self.n_params,
+                x_forecast, P_forecast, P_forecast_inv, the_metadata)
+
+        return x_analysis, P_analysis, P_analysis_inv, \
+            innovations_prime, fwd_modelled
+
+
+    def solver_multiband(self, observations, mask, H_matrix, x_forecast, P_forecast,
                P_forecast_inv, R_mat, the_metadata):
 
         x_analysis, P_analysis, P_analysis_inv, \
