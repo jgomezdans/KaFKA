@@ -78,26 +78,49 @@ def variational_kalman( observations, mask, state_mask, uncertainty, H_matrix, n
     return x_analysis, None, A, innovations, fwd_modelled
     
 
-
-def variational_kalman_multiband( observations, mask, state_mask, uncertainty, H_matrix, n_params,
-            x_forecast, P_forecast, P_forecast_inv, the_metadata, approx_diagonal=True):
-    """We can just use """
-    n_bands = len(observations)
+def sort_band_data(H_matrix, observations, uncertainty, mask, state_mask):
     if len(H_matrix) == 2:
         non_linear = True
-        H0, H_matrix_ = H_matrix
+        H0, H_matrix_ = H_matrix_b[i]
     else:
         H0 = 0.
+        H_matrix_ = H_matrix_b[i]
         non_linear = False
-    R_mat = sp.diags(uncertainty.diagonal()[state_mask.flatten()])
-    LOG.info("Creating linear problem")
+    R = uncertainty.diagonal()[state_mask.flatten()]
     y = observations[state_mask]
     y = np.where(mask[state_mask], y, 0.)
     y_orig = y*1.
     if non_linear:
         y = y + H_matrix_.dot(x_forecast) - H0
-    
+    return H_matrix_, H0, R, y, y_orig
         
+
+
+def variational_kalman_multiband( observations_b, mask_b, state_mask, uncertainty, H_matrix_b, n_params,
+            x_forecast, P_forecast, P_forecast_inv, the_metadata_b, approx_diagonal=True):
+    """We can just use """
+    n_bands = len(observations)
+    import ipdb; ipdb.set_trace()
+    y = []
+    y_orig = []
+    H_matrix = []
+    H0 = []
+    R_mat = []
+    for i in range(n_bands):
+        a, b, c, d, e = sort_band_data(H_matrix[i], observations[i], 
+                                       uncertainty[i], mask[i], state_mask)        
+        H_matrix.append(a)
+        H0_matrix.append(b)
+        R_mat.append(c)
+        y.append(d)
+        y_orig.append(e)
+    H_matrix_ = np.hstack(H_matrix)
+    H0_matrix = np.hstack(H0_matrix)
+    R_mat = sp.diags(np.hstack(R_mat))
+    y = np.hstack(y)
+    y_orig = np.hstack(y_orig)
+    import ipdb; ipdb.set_trace()
+
     #Aa = matrix_squeeze (P_forecast_inv, mask=maska.ravel())
     A = H_matrix_.T.dot(R_mat).dot(H_matrix_) + P_forecast_inv
     b = H_matrix_.T.dot(R_mat).dot(y) + P_forecast_inv.dot (x_forecast)
