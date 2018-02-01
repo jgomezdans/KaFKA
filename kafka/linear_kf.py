@@ -60,7 +60,7 @@ class LinearKalman (object):
     goal of this class is not to consider complex, time evolving models, but
     rather grotty "0-th" order models!"""
     def __init__(self, observations, output, state_mask,
-                 create_observation_operator,parameters_list,
+                 create_observation_operator, parameters_list,
                  state_propagation=propagate_information_filter_LAI,
                  linear=True, diagnostics=True, prior=None):
         """The class creator takes (i) an observations object, (ii) an output
@@ -176,6 +176,7 @@ class LinearKalman (object):
             self.current_timestep = timestep
 
             if not is_first:
+                import ipdb; ipdb.set_trace()
                 LOG.info("Advancing state, %s" % timestep.strftime("%Y-%m-%d"))
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
                     x_analysis, P_analysis, P_analysis_inverse,
@@ -218,13 +219,20 @@ class LinearKalman (object):
                                          P_forecast_inverse)
                 # Once the band is assimilated, the posterior (i.e. analysis)
                 # becomes the prior (i.e. forecast)
-                x_forecast = x_analysis
-                P_forecast = P_analysis
-                P_forecast_inv = P_analysis_inverse
+                x_forecast = x_analysis*1.
+                if P_analysis is not None:
+                    P_forecast = P_analysis*1.
+                else:
+                    P_forecast = None
+                if P_analysis_inverse is not None:
+                    P_forecast_inverse = P_analysis_inverse*1.
+                else:
+                    P_forecast_inverse = None
+                #P_forecast_inv = P_analysis_inverse*1.
 
         self.previous_state = Previous_State(step, x_analysis,
                                              P_analysis, P_analysis_inverse)
-
+        
         return x_analysis, P_analysis, P_analysis_inverse
 
     def assimilate_band(self, band, timestep, x_forecast, P_forecast,
@@ -289,6 +297,14 @@ class LinearKalman (object):
                                           self.n_params)
         P_analysis_inverse = P_analysis_inverse - P_correction
         # P_analysis_inverse = UPDATE HESSIAN WITH HIGHER ORDER CONTRIBUTION
+        import matplotlib.pyplot as plt
+        M = self.state_mask*1.
+        M[self.state_mask] = x_analysis[6::7]
+        plt.figure()
+        plt.imshow(M[650:730, 1180:1280], interpolation="nearest", vmin=0.1, vmax=0.5)
+        plt.title("Band: %d, Date:"%band + timestep.strftime("%Y-%m-%d"))
+        import ipdb; ipdb.set_trace()
+        
         return x_analysis, P_analysis, P_analysis_inverse, innovations
 
     def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
