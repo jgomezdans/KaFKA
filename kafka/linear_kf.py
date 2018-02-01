@@ -62,8 +62,7 @@ class LinearKalman (object):
     def __init__(self, observations, output, state_mask,
                  create_observation_operator,parameters_list,
                  state_propagation=propagate_information_filter_LAI,
-                 linear=True, diagnostics=True,
-                 bands_per_observation=1, prior=None):
+                 linear=True, diagnostics=True, prior=None):
         """The class creator takes (i) an observations object, (ii) an output
         writer object, (iii) the state mask (a boolean 2D array indicating which
         pixels are used in the inference), and additionally, (iv) a state
@@ -79,7 +78,6 @@ class LinearKalman (object):
         self.observations = observations
         self.output = output
         self.diagnostics = diagnostics
-        self.bands_per_observation = bands_per_observation
         self.state_mask = state_mask
         self.n_state_elems = self.state_mask.sum()
         self._state_propagator = state_propagation
@@ -214,7 +212,7 @@ class LinearKalman (object):
         variance `P_forecast`."""
         for step in locate_times:
             LOG.info("Assimilating %s..." % step.strftime("%Y-%m-%d"))
-            for band in xrange(self.bands_per_observation):
+            for band in range(self.observations.bands_per_observation[step]):
                 x_analysis, P_analysis, P_analysis_inverse, innovations = \
                     self.assimilate_band(band, step, x_forecast, P_forecast,
                                          P_forecast_inverse)
@@ -267,7 +265,7 @@ class LinearKalman (object):
             # There might be better tests, but this is quite straightforward
             passer_mask = data.mask[self.state_mask]
             maska = np.concatenate([passer_mask.ravel()
-                                    for i in xrange(self.n_params)])
+                                    for i in range(self.n_params)])
             convergence_norm = np.linalg.norm(x_analysis[maska] -
                                               x_prev[maska])/float(maska.sum())
             LOG.info(

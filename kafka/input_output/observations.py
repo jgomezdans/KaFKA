@@ -324,7 +324,7 @@ class BHRObservationsTest(object):
 
 class KafkaOutput(object):
     """A very simple class to output the state."""
-    def __init__(self, geotransform, projection, folder,
+    def __init__(self, parameter_list, geotransform, projection, folder,
                  fmt="GTiff"):
         """The inference engine works on tiles, so we get the tilewidth
         (we assume the tiles are square), the GDAL-friendly geotransform
@@ -334,12 +334,12 @@ class KafkaOutput(object):
         self.projection = projection
         self.folder = folder
         self.fmt = fmt
+        self.parameter_list = parameter_list
 
     def dump_data(self, timestep, x_analysis, P_analysis, P_analysis_inv,
                   state_mask):
         drv = gdal.GetDriverByName(self.fmt)
-        for ii, param in enumerate(["w_vis", "x_vis", "a_vis",
-                                    "w_nir", "x_nir", "a_nir", "TeLAI"]):
+        for ii, param in enumerate(self.parameter_list):
             fname = os.path.join(self.folder, "%s_%s.tif" %
                                  (param, timestep.strftime("A%Y%j")))
             dst_ds = drv.Create(fname, state_mask.shape[1],
