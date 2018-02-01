@@ -76,6 +76,7 @@ def blend_prior(prior_mean, prior_cov_inverse, x_forecast, P_forecast_inverse):
     # calculate combined covariance
     combined_cov_inv = P_forecast_inverse + prior_cov_inverse
     b = P_forecast_inverse.dot(prior_mean) + prior_cov_inverse.dot(x_forecast)
+    b = b.astype(np.float32)
     # Solve for combined mean
     AI = sp.linalg.splu(combined_cov_inv.tocsc())
     x_combined = AI.solve(b)
