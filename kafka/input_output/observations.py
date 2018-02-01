@@ -234,6 +234,10 @@ class BHRObservations(RetrieveBRDFDescriptors):
         self._get_emulator(emulator)
         self.dates = sorted(self.a1_granules.keys())
         self.dates = self.dates[::8]
+        self.bands_per_observation = {}
+        for the_date in self.dates:
+            self.bands_per_observation[the_date] = 2 # 2 bands
+        
         a1_temp = {}
         a2_temp = {}
         for k in self.dates:
@@ -305,6 +309,10 @@ class BHRObservationsTest(object):
         self.dates = {}
         for ii, the_date in enumerate(dates):
             self.dates[the_date] = [vis_albedo[ii], nir_albedo[ii]]
+            
+        self.bands_per_observation = {}
+        for the_date in self.dates:
+            self.bands_per_observation[the_date] = 2 # 2 bands
     
     def get_band_data(self, the_date, band_no):
         bhr = self.dates[the_date][band_no]
