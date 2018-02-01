@@ -77,3 +77,45 @@ def variational_kalman( observations, mask, state_mask, uncertainty, H_matrix, n
     
     return x_analysis, None, A, innovations, fwd_modelled
     
+
+
+def variational_kalman_multiband( observations, mask, state_mask, uncertainty, H_matrix, n_params,
+            x_forecast, P_forecast, P_forecast_inv, the_metadata, approx_diagonal=True):
+    """We can just use """
+    n_bands = len(observations)
+    if len(H_matrix) == 2:
+        non_linear = True
+        H0, H_matrix_ = H_matrix
+    else:
+        H0 = 0.
+        non_linear = False
+    R_mat = sp.diags(uncertainty.diagonal()[state_mask.flatten()])
+    LOG.info("Creating linear problem")
+    y = observations[state_mask]
+    y = np.where(mask[state_mask], y, 0.)
+    y_orig = y*1.
+    if non_linear:
+        y = y + H_matrix_.dot(x_forecast) - H0
+    
+        
+    #Aa = matrix_squeeze (P_forecast_inv, mask=maska.ravel())
+    A = H_matrix_.T.dot(R_mat).dot(H_matrix_) + P_forecast_inv
+    b = H_matrix_.T.dot(R_mat).dot(y) + P_forecast_inv.dot (x_forecast)
+    b = b.astype(np.float32)
+    A = A.astype(np.float32)
+    # Here we can either do a spLU of A, and solve, or we can have a first go
+    # by assuming P_forecast_inv is diagonal, and use the inverse of A_approx as
+    # a preconditioner
+    LOG.info("Solving")
+    AI = sp.linalg.splu (A)
+    x_analysis = AI.solve (b)
+    # So retval is the solution vector and A is the Hessian 
+    # (->inv(A) is posterior cov)
+    fwd_modelled = H_matrix_.dot(x_analysis-x_forecast) + H0
+    innovations = y_orig - fwd_modelled
+    
+    #x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
+    #                                    mask.ravel(), n_params=n_params)
+    
+    return x_analysis, None, A, innovations, fwd_modelled
+    

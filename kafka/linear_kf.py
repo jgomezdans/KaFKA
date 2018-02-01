@@ -204,6 +204,97 @@ class LinearKalman (object):
             self.output.dump_data(timestep, x_analysis, P_analysis,
                                   P_analysis_inverse, self.state_mask)
 
+    def assimilate_multiple_bands(self, locate_times, x_forecast, P_forecast,
+                   P_forecast_inverse,
+                   approx_diagonal=True, refine_diag=False,
+                   iter_obs_op=False, is_robust=False, diag_str="diag"):        
+        """The method assimilates the observatins at timestep `timestep`, using
+        a prior a multivariate Gaussian distribution with mean `x_forecast` and
+        variance `P_forecast`. THIS DOES ALL BANDS SIMULTANEOUSLY!!!!!"""
+        for step in locate_times:
+            LOG.info("Assimilating %s..." % step.strftime("%Y-%m-%d"))
+            current_data = []
+            # Reads all bands into one list
+            for band in range(self.observations.bands_per_observation[step]):
+                current_data.append(self.observations.get_band_data(timestep, 
+                                                                    band))
+            
+
+
+    def do_all_bands(self, timestep, current_data, x_forecast, P_forecast,
+                        P_forecast_inverse, convergence_tolerance=1e-3,
+                        min_iterations=4)::
+        not_converged = True
+        # Linearisation point is set to x_forecast for first iteration
+        x_prev = x_forecast*1.
+        n_iter = 1
+        n_bands = len(current_data)
+        Y = []
+        MASK = []
+        UNC = []
+        META = []
+        
+        while not_converged:
+            for band in range(n_bands):
+                # Create H0 and H_matrix around x_prev
+                # Also extract single band information from nice package
+                # this allows us to use the same interface as current
+                # Deferring processing to a new solver method in solvers.py
+                
+                H_matrix_= self._create_observation_operator(self.n_params,
+                                                         data.emulator,
+                                                         data.metadata,
+                                                         data.mask,
+                                                         self.state_mask,
+                                                         x_prev,
+                                                         band)
+                H_matrix.append(H_matrix_)
+                Y.append(current_data[band].observations)
+                MASK.append(current_data[band].mask)
+                UNC.append(current_data[band].uncertainty)
+                META.append(current_data[band].metadata)
+            # Now call the solver 
+            x_analysis, P_analysis, P_analysis_inverse, \
+                innovations, fwd_modelled = self.solver(
+                    Y, MASK, H_matrix, x_forecast,
+                    P_forecast, P_forecast_inverse, UNC,
+                    UNC)
+            # Test convergence. We calculate the l2 norm of the difference
+            # between the state at the previous iteration and the current one
+            # There might be better tests, but this is quite straightforward
+            passer_mask = data.mask[self.state_mask]
+            maska = np.concatenate([passer_mask.ravel()
+                                    for i in range(self.n_params)])
+            convergence_norm = np.linalg.norm(x_analysis[maska] -
+                                              x_prev[maska])/float(maska.sum())
+            LOG.info(
+                "Band {:d}, Iteration # {:d}, convergence norm: {:g}".format(
+                    band, n_iter, convergence_norm))
+            if (convergence_norm < convergence_tolerance) and (
+                    n_iter >= min_iterations):
+                # Converged!
+                not_converged = False
+            elif n_iter > 25:
+                # Too many iterations
+                LOG.warning("Bailing out after 25 iterations!!!!!!")
+                not_converged = False
+
+            x_prev = x_analysis
+            n_iter += 1
+
+            
+        # Once we have converged...
+        # Correct hessian for higher order terms
+        # TODO THIS WILL NOT WORK AS IT IS!!!
+        #P_correction = hessian_correction(data.emulator, x_analysis,
+        #                                  data.uncertainty, innovations,
+        #                                  data.mask, self.state_mask, band,
+        #                                  self.n_params)
+        #P_analysis_inverse = P_analysis_inverse - P_correction
+
+        # Done with this observation, move along...
+        return x_analysis, P_analysis, P_analysis_inverse, innovations
+                
     def assimilate(self, locate_times, x_forecast, P_forecast,
                    P_forecast_inverse,
                    approx_diagonal=True, refine_diag=False,
