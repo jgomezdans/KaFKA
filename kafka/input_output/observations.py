@@ -233,7 +233,7 @@ class BHRObservations(RetrieveBRDFDescriptors):
         #                  mcd43a2_dir)
         self._get_emulator(emulator)
         self.dates = sorted(self.a1_granules.keys())
-        self.dates = self.dates[::8]
+        self.dates = self.dates[::16]
         self.bands_per_observation = {}
         for the_date in self.dates:
             self.bands_per_observation[the_date] = 2 # 2 bands
