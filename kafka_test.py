@@ -106,8 +106,8 @@ class JRCPrior(object):
         -------
         The mean prior vector, covariance and inverse covariance matrices."""
         # broadly TLAI 0->7 for 1sigma
-        sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.7])
-        x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, np.exp(-0.5*1.5)])
+        sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.5])
+        x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, np.exp(-0.5*2.)])
         # The individual covariance matrix
         little_p = np.diag(sigma**2).astype(np.float32)
         little_p[5, 2] = 0.8862*0.0959*0.2
