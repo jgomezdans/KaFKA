@@ -212,7 +212,6 @@ class LinearKalman (object):
         a prior a multivariate Gaussian distribution with mean `x_forecast` and
         variance `P_forecast`. THIS DOES ALL BANDS SIMULTANEOUSLY!!!!!"""
         for step in locate_times:
-            print locate_times
             LOG.info("Assimilating %s..." % step.strftime("%Y-%m-%d"))
             current_data = []
             # Reads all bands into one list
