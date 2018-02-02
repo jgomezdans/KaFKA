@@ -101,7 +101,7 @@ def variational_kalman_multiband( observations_b, mask_b, state_mask, uncertaint
             x_forecast, P_forecast, P_forecast_inv, the_metadata_b, approx_diagonal=True):
     """We can just use """
     n_bands = len(observations_b)
-
+    
     y = []
     y_orig = []
     H_matrix = []
@@ -109,7 +109,7 @@ def variational_kalman_multiband( observations_b, mask_b, state_mask, uncertaint
     R_mat = []
     for i in range(n_bands):
         a, b, c, d, e = sort_band_data(H_matrix_b[i], observations_b[i], 
-                                       uncertainty_b[i], mask_b[i], x_forecast, state_mask)        
+                                       uncertainty_b[i], mask_b[i], x_forecast, state_mask)
         H_matrix.append(a)
         H0.append(b)
         R_mat.append(c)
@@ -139,6 +139,5 @@ def variational_kalman_multiband( observations_b, mask_b, state_mask, uncertaint
     
     #x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
     #                                    mask.ravel(), n_params=n_params)
-    
     return x_analysis, None, A, innovations, fwd_modelled
     

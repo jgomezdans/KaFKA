@@ -192,6 +192,7 @@ class LinearKalman (object):
 
             else:
                 # We do have data, so we assimilate
+
                 x_analysis, P_analysis, P_analysis_inverse = self.assimilate_multiple_bands(
                                      locate_times, x_forecast, P_forecast,
                                      P_forecast_inverse,
@@ -211,13 +212,14 @@ class LinearKalman (object):
         a prior a multivariate Gaussian distribution with mean `x_forecast` and
         variance `P_forecast`. THIS DOES ALL BANDS SIMULTANEOUSLY!!!!!"""
         for step in locate_times:
+            print locate_times
             LOG.info("Assimilating %s..." % step.strftime("%Y-%m-%d"))
             current_data = []
             # Reads all bands into one list
             for band in range(self.observations.bands_per_observation[step]):
                 current_data.append(self.observations.get_band_data(step, 
                                                                     band))
-            
+                
             x_analysis, P_analysis, P_analysis_inverse, innovations = \
                 self.do_all_bands(step, current_data, x_forecast, P_forecast,
                                   P_forecast_inverse)
@@ -231,11 +233,12 @@ class LinearKalman (object):
             except:
                 P_forecast_inverse = None
                         
-        return x_analysis, P_analysis, P_analysis_inverse
+        return x_analysis, P_analysis, P_analysis_inverse            
+
 
     def do_all_bands(self, timestep, current_data, x_forecast, P_forecast,
                         P_forecast_inverse, convergence_tolerance=1e-3,
-                        min_iterations=4):
+                        min_iterations=0):
         not_converged = True
         # Linearisation point is set to x_forecast for first iteration
         x_prev = x_forecast*1.
@@ -246,6 +249,7 @@ class LinearKalman (object):
         UNC = []
         META = []
         H_matrix = []
+        
         while not_converged:
             for band, data in enumerate(current_data):
                 # Create H0 and H_matrix around x_prev
@@ -270,18 +274,19 @@ class LinearKalman (object):
                 innovations, fwd_modelled = self.solver_multiband(
                     Y, MASK, H_matrix, x_forecast,
                     P_forecast, P_forecast_inverse, UNC,
-                    UNC)
+                    META)
             # Test convergence. We calculate the l2 norm of the difference
             # between the state at the previous iteration and the current one
             # There might be better tests, but this is quite straightforward
-            passer_mask = data.mask[self.state_mask]
-            maska = np.concatenate([passer_mask.ravel()
-                                    for i in range(self.n_params)])
-            convergence_norm = np.linalg.norm(x_analysis[maska] -
-                                              x_prev[maska])/float(maska.sum())
+            #passer_mask = data.mask[self.state_mask]
+            #maska = np.concatenate([passer_mask.ravel()
+            #                        for i in range(self.n_params)])
+            #convergence_norm = np.linalg.norm(x_analysis[maska] -
+            #                                  x_prev[maska])/float(maska.sum())
+            convergence_norm = np.linalg.norm(x_analysis - x_prev)/float(len(x_analysis))
             LOG.info(
-                "Iteration # {:d}, convergence norm: {:g}".format(
-                    n_iter, convergence_norm))
+                "Band {:d}, Iteration # {:d}, convergence norm: {:g}".format(
+                    band, n_iter, convergence_norm))
             if (convergence_norm < convergence_tolerance) and (
                     n_iter >= min_iterations):
                 # Converged!
@@ -298,10 +303,6 @@ class LinearKalman (object):
         # Once we have converged...
         # Correct hessian for higher order terms
         # TODO THIS WILL NOT WORK AS IT IS!!!
-        try:
-            print("Correct hessian for higher order terms TODO")
-        except:
-            print "Correct hessian for higher order terms TODO"
         #P_correction = hessian_correction(data.emulator, x_analysis,
         #                                  data.uncertainty, innovations,
         #                                  data.mask, self.state_mask, band,
@@ -309,6 +310,7 @@ class LinearKalman (object):
         #P_analysis_inverse = P_analysis_inverse - P_correction
 
         # Done with this observation, move along...
+
         return x_analysis, P_analysis, P_analysis_inverse, innovations
                 
     def assimilate(self, locate_times, x_forecast, P_forecast,
@@ -339,12 +341,12 @@ class LinearKalman (object):
 
         self.previous_state = Previous_State(step, x_analysis,
                                              P_analysis, P_analysis_inverse)
-        
+
         return x_analysis, P_analysis, P_analysis_inverse
 
     def assimilate_band(self, band, timestep, x_forecast, P_forecast,
                         P_forecast_inverse, convergence_tolerance=1e-3,
-                        min_iterations=4):
+                        min_iterations=1):
         """A method to assimilate a band using an interative linearisation
         approach.  This method isn't very sexy, just (i) reads the data, (ii)
         iterates over the solution, updating the linearisation point and calls
@@ -410,7 +412,7 @@ class LinearKalman (object):
         plt.figure()
         plt.imshow(M[650:730, 1180:1280], interpolation="nearest", vmin=0.1, vmax=0.5)
         plt.title("Band: %d, Date:"%band + timestep.strftime("%Y-%m-%d"))
-
+        import ipdb; ipdb.set_trace()
         
         return x_analysis, P_analysis, P_analysis_inverse, innovations
 
