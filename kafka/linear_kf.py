@@ -31,6 +31,7 @@ import scipy.sparse as sp
 
 # from utils import  matrix_squeeze, spsolve2, reconstruct_array
 from inference import variational_kalman
+from inference import variational_kalman_multiband
 from inference import locate_in_lut, run_emulator, create_uncertainty
 from inference import create_linear_observation_operator
 from inference import create_nonlinear_observation_operator
@@ -176,7 +177,6 @@ class LinearKalman (object):
             self.current_timestep = timestep
 
             if not is_first:
-                import ipdb; ipdb.set_trace()
                 LOG.info("Advancing state, %s" % timestep.strftime("%Y-%m-%d"))
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
                     x_analysis, P_analysis, P_analysis_inverse,
@@ -192,8 +192,7 @@ class LinearKalman (object):
 
             else:
                 # We do have data, so we assimilate
-
-                x_analysis, P_analysis, P_analysis_inverse = self.assimilate(
+                x_analysis, P_analysis, P_analysis_inverse = self.assimilate_multiple_bands(
                                      locate_times, x_forecast, P_forecast,
                                      P_forecast_inverse,
                                      approx_diagonal=approx_diagonal,
@@ -216,14 +215,27 @@ class LinearKalman (object):
             current_data = []
             # Reads all bands into one list
             for band in range(self.observations.bands_per_observation[step]):
-                current_data.append(self.observations.get_band_data(timestep, 
+                current_data.append(self.observations.get_band_data(step, 
                                                                     band))
             
-
+            x_analysis, P_analysis, P_analysis_inverse, innovations = \
+                self.do_all_bands(step, current_data, x_forecast, P_forecast,
+                                  P_forecast_inverse)
+            x_forecast = x_analysis*1.
+            try:
+                P_forecast = P_analysis*1.
+            except:
+                P_forecast = None
+            try:
+                P_forecast_inverse = P_analysis_inverse*1.
+            except:
+                P_forecast_inverse = None
+                        
+        return x_analysis, P_analysis, P_analysis_inverse
 
     def do_all_bands(self, timestep, current_data, x_forecast, P_forecast,
                         P_forecast_inverse, convergence_tolerance=1e-3,
-                        min_iterations=4)::
+                        min_iterations=4):
         not_converged = True
         # Linearisation point is set to x_forecast for first iteration
         x_prev = x_forecast*1.
@@ -233,9 +245,9 @@ class LinearKalman (object):
         MASK = []
         UNC = []
         META = []
-        
+        H_matrix = []
         while not_converged:
-            for band in range(n_bands):
+            for band, data in enumerate(current_data):
                 # Create H0 and H_matrix around x_prev
                 # Also extract single band information from nice package
                 # this allows us to use the same interface as current
@@ -249,10 +261,10 @@ class LinearKalman (object):
                                                          x_prev,
                                                          band)
                 H_matrix.append(H_matrix_)
-                Y.append(current_data[band].observations)
-                MASK.append(current_data[band].mask)
-                UNC.append(current_data[band].uncertainty)
-                META.append(current_data[band].metadata)
+                Y.append(data.observations)
+                MASK.append(data.mask)
+                UNC.append(data.uncertainty)
+                META.append(data.metadata)
             # Now call the solver 
             x_analysis, P_analysis, P_analysis_inverse, \
                 innovations, fwd_modelled = self.solver_multiband(
@@ -268,8 +280,8 @@ class LinearKalman (object):
             convergence_norm = np.linalg.norm(x_analysis[maska] -
                                               x_prev[maska])/float(maska.sum())
             LOG.info(
-                "Band {:d}, Iteration # {:d}, convergence norm: {:g}".format(
-                    band, n_iter, convergence_norm))
+                "Iteration # {:d}, convergence norm: {:g}".format(
+                    n_iter, convergence_norm))
             if (convergence_norm < convergence_tolerance) and (
                     n_iter >= min_iterations):
                 # Converged!
@@ -286,6 +298,10 @@ class LinearKalman (object):
         # Once we have converged...
         # Correct hessian for higher order terms
         # TODO THIS WILL NOT WORK AS IT IS!!!
+        try:
+            print("Correct hessian for higher order terms TODO")
+        except:
+            print "Correct hessian for higher order terms TODO"
         #P_correction = hessian_correction(data.emulator, x_analysis,
         #                                  data.uncertainty, innovations,
         #                                  data.mask, self.state_mask, band,
@@ -394,7 +410,7 @@ class LinearKalman (object):
         plt.figure()
         plt.imshow(M[650:730, 1180:1280], interpolation="nearest", vmin=0.1, vmax=0.5)
         plt.title("Band: %d, Date:"%band + timestep.strftime("%Y-%m-%d"))
-        import ipdb; ipdb.set_trace()
+
         
         return x_analysis, P_analysis, P_analysis_inverse, innovations
 
@@ -417,7 +433,7 @@ class LinearKalman (object):
 
         x_analysis, P_analysis, P_analysis_inv, \
             innovations_prime, fwd_modelled = \
-            variational_kalman(
+            variational_kalman_multiband(
                 observations, mask, self.state_mask, R_mat, H_matrix,
                 self.n_params,
                 x_forecast, P_forecast, P_forecast_inv, the_metadata)

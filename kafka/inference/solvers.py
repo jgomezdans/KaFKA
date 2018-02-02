@@ -78,13 +78,14 @@ def variational_kalman( observations, mask, state_mask, uncertainty, H_matrix, n
     return x_analysis, None, A, innovations, fwd_modelled
     
 
-def sort_band_data(H_matrix, observations, uncertainty, mask, state_mask):
+def sort_band_data(H_matrix, observations, uncertainty, mask, 
+                   x_forecast, state_mask):
     if len(H_matrix) == 2:
         non_linear = True
-        H0, H_matrix_ = H_matrix_b[i]
+        H0, H_matrix_ = H_matrix
     else:
         H0 = 0.
-        H_matrix_ = H_matrix_b[i]
+        H_matrix_ = H_matrix
         non_linear = False
     R = uncertainty.diagonal()[state_mask.flatten()]
     y = observations[state_mask]
@@ -96,30 +97,29 @@ def sort_band_data(H_matrix, observations, uncertainty, mask, state_mask):
         
 
 
-def variational_kalman_multiband( observations_b, mask_b, state_mask, uncertainty, H_matrix_b, n_params,
+def variational_kalman_multiband( observations_b, mask_b, state_mask, uncertainty_b, H_matrix_b, n_params,
             x_forecast, P_forecast, P_forecast_inv, the_metadata_b, approx_diagonal=True):
     """We can just use """
-    n_bands = len(observations)
-    import ipdb; ipdb.set_trace()
+    n_bands = len(observations_b)
+
     y = []
     y_orig = []
     H_matrix = []
     H0 = []
     R_mat = []
     for i in range(n_bands):
-        a, b, c, d, e = sort_band_data(H_matrix[i], observations[i], 
-                                       uncertainty[i], mask[i], state_mask)        
+        a, b, c, d, e = sort_band_data(H_matrix_b[i], observations_b[i], 
+                                       uncertainty_b[i], mask_b[i], x_forecast, state_mask)        
         H_matrix.append(a)
-        H0_matrix.append(b)
+        H0.append(b)
         R_mat.append(c)
         y.append(d)
         y_orig.append(e)
-    H_matrix_ = np.hstack(H_matrix)
-    H0_matrix = np.hstack(H0_matrix)
+    H_matrix_ = sp.vstack(H_matrix)
+    H0 = np.hstack(H0)
     R_mat = sp.diags(np.hstack(R_mat))
     y = np.hstack(y)
     y_orig = np.hstack(y_orig)
-    import ipdb; ipdb.set_trace()
 
     #Aa = matrix_squeeze (P_forecast_inv, mask=maska.ravel())
     A = H_matrix_.T.dot(R_mat).dot(H_matrix_) + P_forecast_inv
