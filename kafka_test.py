@@ -198,8 +198,8 @@ if __name__ == "__main__":
     kf.set_trajectory_model()
     kf.set_trajectory_uncertainty(Q)
     
-    base = datetime(2017,7,1)
-    num_days = 60
+    base = datetime(2017,1,1)
+    num_days = 360
     time_grid = list((base + timedelta(days=x) 
                   for x in range(0, num_days, 16)))
     kf.run(time_grid, x_forecast, None, P_forecast_inv, iter_obs_op=True)

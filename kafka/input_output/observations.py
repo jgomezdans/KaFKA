@@ -352,6 +352,20 @@ class KafkaOutput(object):
             A = np.zeros(state_mask.shape, dtype=np.float32)
             A[state_mask] = x_analysis[ii::7]
             dst_ds.GetRasterBand(1).WriteArray(A)
+        for ii, param in enumerate(self.parameter_list):
+            fname = os.path.join(self.folder, "%s_%s_unc.tif" %
+                                 (param, timestep.strftime("A%Y%j")))
+            dst_ds = drv.Create(fname, state_mask.shape[1],
+                                state_mask.shape[0], 1,
+                                gdal.GDT_Float32, ['COMPRESS=DEFLATE',
+                                                   'BIGTIFF=YES',
+                                                   'PREDICTOR=1', 'TILED=YES'])
+            dst_ds.SetProjection(self.projection)
+            dst_ds.SetGeoTransform(self.geotransform)
+            A = np.zeros(state_mask.shape, dtype=np.float32)
+            A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::7])
+            dst_ds.GetRasterBand(1).WriteArray(A)
+
 
 
 if __name__ == "__main__":
