@@ -237,19 +237,19 @@ class LinearKalman (object):
 
     def do_all_bands(self, timestep, current_data, x_forecast, P_forecast,
                         P_forecast_inverse, convergence_tolerance=1e-3,
-                        min_iterations=0):
+                        min_iterations=2):
         not_converged = True
         # Linearisation point is set to x_forecast for first iteration
         x_prev = x_forecast*1.
         n_iter = 1
         n_bands = len(current_data)
-        Y = []
-        MASK = []
-        UNC = []
-        META = []
-        H_matrix = []
         
         while not_converged:
+            Y = []
+            MASK = []
+            UNC = []
+            META = []
+            H_matrix = []
             for band, data in enumerate(current_data):
                 # Create H0 and H_matrix around x_prev
                 # Also extract single band information from nice package
@@ -271,9 +271,11 @@ class LinearKalman (object):
             # Now call the solver 
             x_analysis, P_analysis, P_analysis_inverse, \
                 innovations, fwd_modelled = self.solver_multiband(
-                    Y, MASK, H_matrix, x_forecast,
+                    Y, MASK, H_matrix, x_prev, x_forecast,
                     P_forecast, P_forecast_inverse, UNC,
                     META)
+            
+
             # Test convergence. We calculate the l2 norm of the difference
             # between the state at the previous iteration and the current one
             # There might be better tests, but this is quite straightforward
@@ -295,9 +297,8 @@ class LinearKalman (object):
                 LOG.warning("Bailing out after 25 iterations!!!!!!")
                 not_converged = False
 
-            x_prev = x_analysis
+            x_prev = x_analysis*1.
             n_iter += 1
-
             
         # Once we have converged...
         # Correct hessian for higher order terms
@@ -429,14 +430,14 @@ class LinearKalman (object):
             innovations_prime, fwd_modelled
 
 
-    def solver_multiband(self, observations, mask, H_matrix, x_forecast, P_forecast,
+    def solver_multiband(self, observations, mask, H_matrix, x0, x_forecast, P_forecast,
                P_forecast_inv, R_mat, the_metadata):
 
         x_analysis, P_analysis, P_analysis_inv, \
             innovations_prime, fwd_modelled = \
             variational_kalman_multiband(
                 observations, mask, self.state_mask, R_mat, H_matrix,
-                self.n_params,
+                self.n_params, x0,
                 x_forecast, P_forecast, P_forecast_inv, the_metadata)
 
         return x_analysis, P_analysis, P_analysis_inv, \
