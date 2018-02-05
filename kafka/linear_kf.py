@@ -412,7 +412,6 @@ class LinearKalman (object):
         plt.figure()
         plt.imshow(M[650:730, 1180:1280], interpolation="nearest", vmin=0.1, vmax=0.5)
         plt.title("Band: %d, Date:"%band + timestep.strftime("%Y-%m-%d"))
-        import ipdb; ipdb.set_trace()
         
         return x_analysis, P_analysis, P_analysis_inverse, innovations
 

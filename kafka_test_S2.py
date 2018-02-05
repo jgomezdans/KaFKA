@@ -77,7 +77,16 @@ class SAILPrior(object):
             self.state_mask = state_mask
         else:
             self.state_mask = self._read_mask(state_mask)
-            self.mean = np.array([1.2, np.exp(
+    #parameter_list = ['n', 'cab', 'car', 'cbrown', 'cw', 'cm',
+     #                 'lai', 'ala', 'bsoil', 'psoil']
+            self.mean = np.array([1.19, np.exp(-14.4/100.),
+                                 np.exp(-4.0/100.), 0,
+                                 np.exp(-50*0.68), np.exp(-100./21.0),
+                                 np.exp(-3.97/2.),70./90., 0.5, 0.9)]
+            self.mean = np.array([0.69, -0.016,
+                                 -0.0086, 0,
+                                 -1.71e-15, 0.017,
+                                 0.20,70./90., 0.5, 0.9])
         ########self.mean = 
         ########self.variance = 
     ########lai_m2_m2: [3.1733 1.7940]
@@ -150,15 +159,16 @@ if __name__ == "__main__":
                                             state_mask)
     
 
-    #output = KafkaOutput(parameter_list, geotransform, projection, "/tmp/")
-   # 
+    output = KafkaOutput(parameter_list, geotransform,
+                         projection, "S2out_test")
+
     
 
 
 
     the_prior = SAILPrior(parameter_list, state_mask)
 
-    output = []
+    #output = []
     g = gdal.Open(state_mask)
     mask = g.ReadAsArray()
 
@@ -172,8 +182,9 @@ if __name__ == "__main__":
     ooot = oot()
 
 
-    kf = LinearKalman(s2_observations, ooot, mask, 
-                      create_prosail_observation_operator, parameter_list,
+    kf = LinearKalman(s2_observations, output, mask,
+                      create_prosail_observation_operator,
+                      parameter_list,
                       state_propagation=None,
                       prior=the_prior,
                       linear=False)
