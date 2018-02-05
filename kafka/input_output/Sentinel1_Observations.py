@@ -65,6 +65,8 @@ class S1Observations(object):
         self.date_data = {}
         for fich in files:
             fname = os.path.basename(fich)
+            # TODO Maybe filter files by metadata
+            # (e.g. select ascending/descending passes)
             splitter = fname.split('_')
             this_date = datetime.datetime.strptime(splitter[5],
                                                    '%Y%m%dT%H%M%S')
@@ -72,6 +74,10 @@ class S1Observations(object):
             self.date_data[this_date] = fich
         # 2. Store the emulator(s)
         self.emulators = emulators
+        self.bands_per_observation = {}
+        for the_date in self.dates:
+            self.bands_per_observation[the_date] = 2 # 2 bands
+
 
     def _read_backscatter(self, obs_ptr):
         """
