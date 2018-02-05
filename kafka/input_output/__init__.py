@@ -1,4 +1,4 @@
-__all__ = ["observations", "Sentinel2Observations"]
+__all__ = ["observations", "Sentinel2_Observations"]
 
 from .observations import *
-from .Sentinel2Observations import Sentinel2Observations
+from .Sentinel2_Observations import Sentinel2Observations
