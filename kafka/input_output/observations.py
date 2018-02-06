@@ -337,7 +337,7 @@ class KafkaOutput(object):
         self.parameter_list = parameter_list
 
     def dump_data(self, timestep, x_analysis, P_analysis, P_analysis_inv,
-                  state_mask):
+                  state_mask, n_params):
         drv = gdal.GetDriverByName(self.fmt)
         for ii, param in enumerate(self.parameter_list):
             fname = os.path.join(self.folder, "%s_%s.tif" %
@@ -350,7 +350,7 @@ class KafkaOutput(object):
             dst_ds.SetProjection(self.projection)
             dst_ds.SetGeoTransform(self.geotransform)
             A = np.zeros(state_mask.shape, dtype=np.float32)
-            A[state_mask] = x_analysis[ii::7]
+            A[state_mask] = x_analysis[ii::n_params]
             dst_ds.GetRasterBand(1).WriteArray(A)
         for ii, param in enumerate(self.parameter_list):
             fname = os.path.join(self.folder, "%s_%s_unc.tif" %

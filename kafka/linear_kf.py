@@ -202,7 +202,7 @@ class LinearKalman (object):
                                      is_robust=is_robust, diag_str=diag_str)
             LOG.info("Dumping results to disk")
             self.output.dump_data(timestep, x_analysis, P_analysis,
-                                  P_analysis_inverse, self.state_mask)
+                                  P_analysis_inverse, self.state_mask, self.n_params)
 
     def assimilate_multiple_bands(self, locate_times, x_forecast, P_forecast,
                    P_forecast_inverse,
