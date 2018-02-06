@@ -79,17 +79,26 @@ class SAILPrior(object):
             self.state_mask = self._read_mask(state_mask)
     #parameter_list = ['n', 'cab', 'car', 'cbrown', 'cw', 'cm',
      #                 'lai', 'ala', 'bsoil', 'psoil']
-            self.mean = np.array([1.19, np.exp(-14.4/100.),
-                                 np.exp(-4.0/100.), 0,
-                                 np.exp(-50*0.68), np.exp(-100./21.0),
-                                 np.exp(-3.97/2.),70./90., 0.5, 0.9])
-            sigma = np.array([0.69, -0.016,
-                                 -0.0086, 0,
-                                 -1.71e-15, 0.017,
-                                 0.20, 0.5, 0.5, 0.5])
+            #self.mean = np.array([1.19, np.exp(-14.4/100.),
+                                 #np.exp(-4.0/100.), 0.1,
+                                 #np.exp(-50*0.68), np.exp(-100./21.0),
+                                 #np.exp(-3.97/2.),70./90., 0.5, 0.9])
+            #sigma = np.array([0.69, 0.016,
+                                 #0.0086, 0.1,
+                                 #1.71e-2, 0.017,
+                                 #0.20, 0.5, 0.5, 0.5])
+            self.mean = np.array([2.1, np.exp(-60./100.),
+                                 np.exp(-7.0/100.), 0.1,
+                                 np.exp(-50*0.0176), np.exp(-100.*0.002),
+                                 np.exp(-4./2.), 70./90., 0.5, 0.9])
+            sigma = np.array([0.01, 0.2,
+                                 0.01, 0.05,
+                                 0.01, 0.01,
+                                 0.50, 0.1, 0.1, 0.1])
+ 
             self.covar = np.diag(sigma**2).astype(np.float32)
-            self.inv_covar = 1.0/self.covar
-            self.inv_covar[3,3]=0
+            self.inv_covar = np.diag(1./sigma**2).astype(np.float32)
+            #self.inv_covar[3,3]=0
         ########self.mean = 
         ########self.variance = 
     ########lai_m2_m2: [3.1733 1.7940]
@@ -156,6 +165,7 @@ if __name__ == "__main__":
     data_folder = "/data/nemesis/S2_data/30/S/WJ/"
 
     state_mask = "./Barrax_pivots.tif"
+
     
     s2_observations = Sentinel2Observations(data_folder,
                                             emulator_folder, 
@@ -164,7 +174,7 @@ if __name__ == "__main__":
     projection, geotransform = s2_observations.define_output()
 
     output = KafkaOutput(parameter_list, geotransform,
-                         projection, "S2out_test")
+                         projection, "/tmp/")
 
     the_prior = SAILPrior(parameter_list, state_mask)
 
@@ -187,9 +197,9 @@ if __name__ == "__main__":
     kf.set_trajectory_uncertainty(Q)
     
     base = datetime(2017,7,3)
-    num_days = 60
+    num_days = 10
     time_grid = list((base + timedelta(days=x) 
-                     for x in range(0, num_days, 16)))
+                     for x in range(0, num_days, 2)))
     kf.run(time_grid, x_forecast, None, P_forecast_inv,
            iter_obs_op=True)
     

@@ -6,6 +6,7 @@ import os
 import sys
 
 import numpy as np
+import scipy.sparse as sp # Required for unc
 import gdal
 import osr
 
@@ -149,10 +150,19 @@ class Sentinel2Observations(object):
         print(original_s2_file)
         g = reproject_image( original_s2_file, self.state_mask)
         rho_surface = g.ReadAsArray()
-        mask = rho_surface == -9999
-        rho_surface = np.where(mask, 0, rho_surface/10000.)
+        mask = rho_surface > 0
+        rho_surface = np.where(mask, rho_surface/10000., 0)
         # Read and reproject S2 angles
         emulator_band_map = [2, 3, 4, 5, 6, 7, 8, 9, 12, 13]
-        s2data = S2MSIdata (rho_surface, rho_surface*0.02, mask, metadata, 
+        
+        
+        R_mat = rho_surface*0.05
+        R_mat[np.logical_not(mask)] = 0.
+        N = mask.ravel().shape[0]
+        R_mat_sp = sp.lil_matrix((N, N))
+        R_mat_sp.setdiag(1./(R_mat.ravel())**2)
+        R_mat_sp = R_mat_sp.tocsr()
+        
+        s2data = S2MSIdata (rho_surface, R_mat_sp, mask, metadata, 
                             emulator["S2A_MSI_{:02d}".format(emulator_band_map[band])])
         return s2data

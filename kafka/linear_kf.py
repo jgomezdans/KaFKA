@@ -218,7 +218,6 @@ class LinearKalman (object):
             for band in range(self.observations.bands_per_observation[step]):
                 current_data.append(self.observations.get_band_data(step, 
                                                                     band))
-                
             x_analysis, P_analysis, P_analysis_inverse, innovations = \
                 self.do_all_bands(step, current_data, x_forecast, P_forecast,
                                   P_forecast_inverse)
@@ -243,7 +242,6 @@ class LinearKalman (object):
         x_prev = x_forecast*1.
         n_iter = 1
         n_bands = len(current_data)
-        
         while not_converged:
             Y = []
             MASK = []
@@ -310,7 +308,7 @@ class LinearKalman (object):
         #P_analysis_inverse = P_analysis_inverse - P_correction
 
         # Done with this observation, move along...
-
+        
         return x_analysis, P_analysis, P_analysis_inverse, innovations
                 
     def assimilate(self, locate_times, x_forecast, P_forecast,
