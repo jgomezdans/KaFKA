@@ -172,7 +172,7 @@ if __name__ == "__main__":
 
     #output = []
     g = gdal.Open(state_mask)
-    mask = g.ReadAsArray()
+    mask = g.ReadAsArray().astype(np.bool)
 
     class oot(object):
         def __init__ (self):
@@ -206,7 +206,7 @@ if __name__ == "__main__":
     time_grid = list((base + timedelta(days=x) 
                   for x in range(0, num_days, 16)))
     kf.run(time_grid, x_forecast, None, P_forecast_inv,
-           iter_obs_op=True)
+            iter_obs_op=True)
     
 
 
