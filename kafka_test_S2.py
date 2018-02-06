@@ -82,11 +82,14 @@ class SAILPrior(object):
             self.mean = np.array([1.19, np.exp(-14.4/100.),
                                  np.exp(-4.0/100.), 0,
                                  np.exp(-50*0.68), np.exp(-100./21.0),
-                                 np.exp(-3.97/2.),70./90., 0.5, 0.9)]
-            self.mean = np.array([0.69, -0.016,
+                                 np.exp(-3.97/2.),70./90., 0.5, 0.9])
+            sigma = np.array([0.69, -0.016,
                                  -0.0086, 0,
                                  -1.71e-15, 0.017,
-                                 0.20,70./90., 0.5, 0.9])
+                                 0.20, 0.5, 0.5, 0.5])
+            self.covar = np.diag(sigma**2).astype(np.float32)
+            self.inv_covar = 1.0/self.covar
+            self.inv_covar[3,3]=0
         ########self.mean = 
         ########self.variance = 
     ########lai_m2_m2: [3.1733 1.7940]
@@ -157,12 +160,11 @@ if __name__ == "__main__":
     s2_observations = Sentinel2Observations(data_folder,
                                             emulator_folder, 
                                             state_mask)
-    
+
+    projection, geotransform = s2_observations.define_output()
 
     output = KafkaOutput(parameter_list, geotransform,
                          projection, "S2out_test")
-
-    
 
 
 
@@ -190,8 +192,8 @@ if __name__ == "__main__":
                       linear=False)
     
 
-    #### Get starting state... We can request the prior object for this
-    ###x_forecast, P_forecast_inv = the_prior.process_prior(None)
+    # Get starting state... We can request the prior object for this
+    x_forecast, P_forecast_inv = the_prior.process_prior(None)
     
     ###Q = np.zeros_like(x_forecast)
     ###Q[6::7] = 0.025
@@ -199,11 +201,12 @@ if __name__ == "__main__":
     #kf.set_trajectory_model()
     #kf.set_trajectory_uncertainty(Q)
     
-    base = datetime(2017,7,1)
+    base = datetime(2017,1,1)
     num_days = 60
     time_grid = list((base + timedelta(days=x) 
                   for x in range(0, num_days, 16)))
-    kf.run(time_grid, x_forecast, None, P_forecast_inv, iter_obs_op=True)
+    kf.run(time_grid, x_forecast, None, P_forecast_inv,
+           iter_obs_op=True)
     
 
 
