@@ -363,8 +363,7 @@ class KafkaOutput(object):
             dst_ds.SetProjection(self.projection)
             dst_ds.SetGeoTransform(self.geotransform)
             A = np.zeros(state_mask.shape, dtype=np.float32)
-            A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::n_params
-                                       ])
+            A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::n_params])
             dst_ds.GetRasterBand(1).WriteArray(A)
 
 

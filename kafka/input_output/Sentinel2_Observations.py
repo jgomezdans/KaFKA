@@ -88,6 +88,15 @@ class Sentinel2Observations(object):
         emulators.sort()
         self.emulator_files = emulators
 
+    def define_output(self):
+        g = gdal.Open(self.state_mask)
+        proj = g.GetProjection()
+        geoT = np.array(g.GetGeoTransform())
+        #new_geoT = geoT*1.
+        #new_geoT[0] = new_geoT[0] + self.ulx*new_geoT[1]
+        #new_geoT[3] = new_geoT[3] + self.uly*new_geoT[5]
+        return proj, geoT.tolist() #new_geoT.tolist()
+
 
     def _find_granules(self, parent_folder):
         """Finds granules. Currently does so by checking for
