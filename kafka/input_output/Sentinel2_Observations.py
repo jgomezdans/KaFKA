@@ -83,7 +83,7 @@ class Sentinel2Observations(object):
         self.state_mask = state_mask
         self._find_granules(self.parent)
         self.band_map = ['02', '03', '04', '05', '06', '07',
-                         '08', '09', '12', '13']
+                         '08', '8A', '09', '12']
         emulators = glob.glob(os.path.join(self.emulator_folder, "*.pkl"))
         emulators.sort()
         self.emulator_files = emulators
@@ -142,15 +142,17 @@ class Sentinel2Observations(object):
         emulator_file = self._find_emulator(sza, saa, vza, vaa)
         emulator = cPickle.load(open (emulator_file, 'rb'))
         
-        # Read and reproject S2 surface reflectance 
+        # Read and reproject S2 surface reflectance
+        the_band = self.band_map[band]
         original_s2_file = os.path.join ( current_folder, 
-                                         "B{:02d}_sur.tif".format(band))
-        
+                                         "B{}_sur.tif".format(the_band))
+        print(original_s2_file)
         g = reproject_image( original_s2_file, self.state_mask)
         rho_surface = g.ReadAsArray()
         mask = rho_surface == -9999
         rho_surface = np.where(mask, 0, rho_surface/10000.)
         # Read and reproject S2 angles
+        emulator_band_map = [2, 3, 4, 5, 6, 7, 8, 9, 12, 13]
         s2data = S2MSIdata (rho_surface, rho_surface*0.02, mask, metadata, 
-                            emulator["S2A_MSI_{:s}".format(self.band_map[band])])
+                            emulator["S2A_MSI_{:02d}".format(emulator_band_map[band])])
         return s2data

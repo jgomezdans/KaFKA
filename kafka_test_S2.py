@@ -166,23 +166,10 @@ if __name__ == "__main__":
     output = KafkaOutput(parameter_list, geotransform,
                          projection, "S2out_test")
 
-
-
     the_prior = SAILPrior(parameter_list, state_mask)
 
-    #output = []
     g = gdal.Open(state_mask)
     mask = g.ReadAsArray().astype(np.bool)
-
-    class oot(object):
-        def __init__ (self):
-            pass
-        
-        def dump_data(*opts):
-            pass
-        
-    ooot = oot()
-
 
     kf = LinearKalman(s2_observations, output, mask,
                       create_prosail_observation_operator,
@@ -190,23 +177,21 @@ if __name__ == "__main__":
                       state_propagation=None,
                       prior=the_prior,
                       linear=False)
-    
 
     # Get starting state... We can request the prior object for this
     x_forecast, P_forecast_inv = the_prior.process_prior(None)
     
     Q = np.zeros_like(x_forecast)
-    ###Q[6::7] = 0.025
     
     kf.set_trajectory_model()
     kf.set_trajectory_uncertainty(Q)
     
-    base = datetime(2017,1,1)
+    base = datetime(2017,7,3)
     num_days = 60
     time_grid = list((base + timedelta(days=x) 
-                  for x in range(0, num_days, 16)))
+                     for x in range(0, num_days, 16)))
     kf.run(time_grid, x_forecast, None, P_forecast_inv,
-            iter_obs_op=True)
+           iter_obs_op=True)
     
 
 
