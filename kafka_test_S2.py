@@ -195,11 +195,11 @@ if __name__ == "__main__":
     # Get starting state... We can request the prior object for this
     x_forecast, P_forecast_inv = the_prior.process_prior(None)
     
-    ###Q = np.zeros_like(x_forecast)
+    Q = np.zeros_like(x_forecast)
     ###Q[6::7] = 0.025
     
-    #kf.set_trajectory_model()
-    #kf.set_trajectory_uncertainty(Q)
+    kf.set_trajectory_model()
+    kf.set_trajectory_uncertainty(Q)
     
     base = datetime(2017,1,1)
     num_days = 60
