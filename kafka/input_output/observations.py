@@ -212,7 +212,7 @@ class SynergyKernels(object):
 class BHRObservations(RetrieveBRDFDescriptors):
     def __init__(self, emulator, tile, mcd43a1_dir,
                  start_time, ulx=0, uly=0, dx=2400, dy=2400, end_time=None,
-                 mcd43a2_dir=None):
+                 mcd43a2_dir=None, period=16):
         """The class needs to locate the data granules. We assume that
         these are available somewhere in the filesystem and that we can
         index them by location (MODIS tile name e.g. "h19v10") and
@@ -233,7 +233,7 @@ class BHRObservations(RetrieveBRDFDescriptors):
         #                  mcd43a2_dir)
         self._get_emulator(emulator)
         self.dates = sorted(self.a1_granules.keys())
-        self.dates = self.dates[::16]
+        self.dates = self.dates[::period]
         self.bands_per_observation = {}
         for the_date in self.dates:
             self.bands_per_observation[the_date] = 2 # 2 bands
