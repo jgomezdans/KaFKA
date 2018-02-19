@@ -59,16 +59,20 @@ def sar_observation_operator(x, theta, polarisation):
     # the model parameters (A, B, C, D, E) for different polarisations
     parameters = {'VV': [0.0846, 0.0615, -14.8465, 15.907, 1.],
                   'VH': [0.0795, 0.1464, -14.8332, 15.907, 0.]}
-
     # Select model parameters
     try:
         A, B, C, D, E = parameters[polarisation]
     except KeyError:
         raise ValueError('Only VV and VH polarisations available!')
 
+    if np.any(x[:, 0] <= 0.):
+        raise ValueError("Negative LAI!")
+    if np.any(x[:, 1] <= 0.):
+        raise ValueError("Negative SM!")
+
     # Calculate Model
     tau = np.exp(-2. * B / mu * x[:, 0])
-    sigma_veg = A * (x[:, 0] ** E) * mu * (1. - tau)
+    sigma_veg = A * np.power(x[:, 0], E) * mu * (1. - tau)
     sigma_surf = 10. ** ((C + D * x[:, 1]) / 10.)
 
     sigma_0 = sigma_veg + tau * sigma_surf
@@ -78,9 +82,15 @@ def sar_observation_operator(x, theta, polarisation):
     grad = x*0
     n_elems = x.shape[0]
     for i in range(n_elems):
+        z = np.power(x[i, 0], E)
+        if np.isnan(z):
+            z = 1.
+        z1 = np.power(x[i, 0], E-1.)
+        if np.isnan(z1):
+            z1 = 1.
         tau_value = np.exp(-2. * B / mu[i] * x[i, 0])
-        grad[i, 0] = A * E * mu[i] * (x[i, 0] ** (E - 1.)) * (1. - tau_value) + \
-            2. * A * B * (x[i, 0] ** E) * tau_value - (
+        grad[i, 0] = A * E * mu[i] * z1 * (1. - tau_value) + \
+            2. * A * B * z * tau_value - (
             (2. ** (1/10. * (C + D * x[i, 1]) + 1.)) *
             (5. ** (1/10. * (C + D * x[i, 1])) * B * tau_value)
             ) / mu[i]
@@ -89,6 +99,10 @@ def sar_observation_operator(x, theta, polarisation):
 
     # returned values are linear scaled not dB!!!
     # return sigma_0, grad, sigma_veg, sigma_surf, tau
+    if np.any(np.isnan(sigma_0)):
+        raise ValueError("Groan!")
+    if np.any(np.isnan(grad)):
+        raise ValueError("More Groan!")
     return sigma_0, grad
 
 
