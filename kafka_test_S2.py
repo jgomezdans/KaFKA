@@ -70,6 +70,12 @@ def reproject_image(source_img, target_img, dstSRSs=None):
 
     ###def process_prior(self, parameters: List[str], time: Union[str, datetime], state_grid: np.array,
 
+### NOTE Have two prior objects: one where the leaves are green, one where the leaves are brown
+### Green leaves: Cab = 70, Cbrown = 0.1
+### Brown leaves: Cab = 5, Cbrown = 0.9
+
+
+
 class SAILPrior(object):
     def __init__ (self, parameter_list, state_mask):
         self.parameter_list = parameter_list
@@ -77,16 +83,6 @@ class SAILPrior(object):
             self.state_mask = state_mask
         else:
             self.state_mask = self._read_mask(state_mask)
-    #parameter_list = ['n', 'cab', 'car', 'cbrown', 'cw', 'cm',
-     #                 'lai', 'ala', 'bsoil', 'psoil']
-            #self.mean = np.array([1.19, np.exp(-14.4/100.),
-                                 #np.exp(-4.0/100.), 0.1,
-                                 #np.exp(-50*0.68), np.exp(-100./21.0),
-                                 #np.exp(-3.97/2.),70./90., 0.5, 0.9])
-            #sigma = np.array([0.69, 0.016,
-                                 #0.0086, 0.1,
-                                 #1.71e-2, 0.017,
-                                 #0.20, 0.5, 0.5, 0.5])
             self.mean = np.array([2.1, np.exp(-60./100.),
                                  np.exp(-7.0/100.), 0.1,
                                  np.exp(-50*0.0176), np.exp(-100.*0.002),
@@ -98,20 +94,6 @@ class SAILPrior(object):
  
             self.covar = np.diag(sigma**2).astype(np.float32)
             self.inv_covar = np.diag(1./sigma**2).astype(np.float32)
-            #self.inv_covar[3,3]=0
-        ########self.mean = 
-        ########self.variance = 
-    ########lai_m2_m2: [3.1733 1.7940]
-
-    ########cab_ug_cm2: [14.4369 1.8284]
-
-     ########car_u_cm2: [3.9650 0.8948]
-
-     ########cdm_g_cm2: [20.9675 6.4302]
-
-         ########cw_cm: [0.6781 0.6749]
-
-            ########N_: [1.1937 0.6902]    
         
     def _read_mask(self, fname):
         """Tries to read the mask as a GDAL dataset"""
