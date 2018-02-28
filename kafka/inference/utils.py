@@ -133,8 +133,9 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     is achieved by using the `state_mapper` to select which bits
     of the state vector (and model Jacobian) are used."""
     LOG.info("Creating the ObsOp for band %d" % band)
-    n_times = x_forecast.shape[0] / n_params
+    n_times = int( x_forecast.shape[0] / n_params )
     good_obs = mask.sum()
+
     H_matrix = sp.lil_matrix((n_times, n_params * n_times),
                              dtype=np.float32)
     H0 = np.zeros(n_times, dtype=np.float32)

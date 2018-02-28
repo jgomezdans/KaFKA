@@ -39,7 +39,7 @@ MCD43A1/2 -> See BRDF_descriptors!
 
 """
 
-import cPickle
+import _pickle as cPickle
 import datetime
 import glob
 import os
@@ -268,7 +268,7 @@ class BHRObservations(RetrieveBRDFDescriptors):
         if not os.path.exists(emulator):
             raise IOError("The emulator {} doesn't exist!".format(emulator))
         # Assuming emulator is in an pickle file...
-        self.emulator = cPickle.load(open(emulator, 'rb'))
+        self.emulator = cPickle.load(open(emulator, 'rb'), encoding='latin1')
 
     def get_band_data(self, the_date, band_no):
 

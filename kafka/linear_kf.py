@@ -30,15 +30,15 @@ import scipy.sparse as sp
 # from scipy.spatial.distance import squareform, pdist
 
 # from utils import  matrix_squeeze, spsolve2, reconstruct_array
-from inference import variational_kalman
-from inference import variational_kalman_multiband
-from inference import locate_in_lut, run_emulator, create_uncertainty
-from inference import create_linear_observation_operator
-from inference import create_nonlinear_observation_operator
-from inference import iterate_time_grid
-from inference import propagate_information_filter_LAI # eg
-from inference import hessian_correction
-from inference.kf_tools import propagate_and_blend_prior
+from .inference import variational_kalman
+from .inference import variational_kalman_multiband
+from .inference import locate_in_lut, run_emulator, create_uncertainty
+from .inference import create_linear_observation_operator
+from .inference import create_nonlinear_observation_operator
+from .inference import iterate_time_grid
+from .inference import propagate_information_filter_LAI # eg
+from .inference import hessian_correction
+from .inference.kf_tools import propagate_and_blend_prior
 
 # Set up logging
 
@@ -218,6 +218,7 @@ class LinearKalman (object):
             for band in range(self.observations.bands_per_observation[step]):
                 current_data.append(self.observations.get_band_data(step, 
                                                                     band))
+
             x_analysis, P_analysis, P_analysis_inverse, innovations = \
                 self.do_all_bands(step, current_data, x_forecast, P_forecast,
                                   P_forecast_inverse)
