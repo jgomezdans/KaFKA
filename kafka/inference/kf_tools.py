@@ -8,7 +8,7 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as spl
 
-from utils import block_diag
+from .utils import block_diag
 
 class NoHessianMethod(Exception):
     """An exception triggered when the forward model isn't able to provide an
@@ -301,6 +301,7 @@ def propagate_information_filter_LAI(x_analysis, P_analysis,
     x0[6::7] = x_forecast[6::7] # Update LAI
     lai_post_cov = P_analysis_inverse.diagonal()[6::7]
     lai_Q = Q_matrix.diagonal()[6::7]
+
     c_inv_prior_mat = []
     for n in xrange(n_pixels):
         # inflate uncertainty
