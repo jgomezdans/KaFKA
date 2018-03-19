@@ -12,8 +12,8 @@ from pytest import fixture
 myPath = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, myPath + '/../')
 
-from kafka.kf_tools import propagate_standard_kalman
-from kafka.kf_tools import propagate_information_filter
+from .kafka.kf_tools import propagate_standard_kalman
+from .kafka.kf_tools import propagate_information_filter
 
 
 def test_propagate_standard_kalman():
