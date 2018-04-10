@@ -126,8 +126,8 @@ def tip_prior_full(prior):
     # the real code when we know what the priors look like.
     x_prior, c_prior, c_inv_prior = tip_prior()
     n_pixels = prior['n_pixels']
-    mean = np.array([x_prior for i in xrange(n_pixels)]).flatten()
-    c_inv_prior_mat = [c_inv_prior for n in xrange(n_pixels)]
+    mean = np.array([x_prior for i in range(n_pixels)]).flatten()
+    c_inv_prior_mat = [c_inv_prior for n in range(n_pixels)]
     prior_cov_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
 
     return mean, prior_cov_inverse
@@ -296,14 +296,14 @@ def propagate_information_filter_LAI(x_analysis, P_analysis,
 
     x_forecast = M_matrix.dot(x_analysis)
     x_prior, c_prior, c_inv_prior = tip_prior()
-    n_pixels = len(x_analysis)/7
-    x0 = np.array([x_prior for i in xrange(n_pixels)]).flatten()
+    n_pixels = len(x_analysis)//7
+    x0 = np.array([x_prior for i in range(n_pixels)]).flatten()
     x0[6::7] = x_forecast[6::7] # Update LAI
     lai_post_cov = P_analysis_inverse.diagonal()[6::7]
     lai_Q = Q_matrix.diagonal()[6::7]
 
     c_inv_prior_mat = []
-    for n in xrange(n_pixels):
+    for n in range(n_pixels):
         # inflate uncertainty
         lai_inv_cov = 1.0/((1.0/lai_post_cov[n])+lai_Q[n])
         little_P_forecast_inverse = c_inv_prior.copy()
@@ -346,8 +346,8 @@ def no_propagation(x_analysis, P_analysis,
 
     x_prior, c_prior, c_inv_prior = tip_prior()
     n_pixels = len(x_analysis)/7
-    x_forecast = np.array([x_prior for i in xrange(n_pixels)]).flatten()
-    c_inv_prior_mat = [c_inv_prior for n in xrange(n_pixels)]
+    x_forecast = np.array([x_prior for i in range(n_pixels)]).flatten()
+    c_inv_prior_mat = [c_inv_prior for n in range(n_pixels)]
     P_forecast_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
 
     return x_forecast, None, P_forecast_inverse
