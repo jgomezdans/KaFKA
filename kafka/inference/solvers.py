@@ -136,7 +136,10 @@ def variational_kalman_multiband( observations_b, mask_b, state_mask, uncertaint
     # (->inv(A) is posterior cov)
     fwd_modelled = H_matrix_.dot(x_analysis-x_forecast) + H0
     innovations = y_orig - fwd_modelled
-    
+    """ For now I am going to return innovations as y_orig - H0 as
+    That is what is needed by the Hessian correction. Need to discuss with Jose 
+    What the intention for innovations is and then we can find the best solution"""
+    innovations = y_orig - H0
     #x_analysis = reconstruct_array ( x_analysis_prime, x_forecast,
     #                                    mask.ravel(), n_params=n_params)
     return x_analysis, None, A, innovations, fwd_modelled

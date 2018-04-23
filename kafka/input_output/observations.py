@@ -39,7 +39,7 @@ MCD43A1/2 -> See BRDF_descriptors!
 
 """
 
-import cPickle
+import _pickle as cPickle
 import datetime
 import glob
 import os
@@ -212,7 +212,7 @@ class SynergyKernels(object):
 class BHRObservations(RetrieveBRDFDescriptors):
     def __init__(self, emulator, tile, mcd43a1_dir,
                  start_time, ulx=0, uly=0, dx=2400, dy=2400, end_time=None,
-                 mcd43a2_dir=None):
+                 mcd43a2_dir=None, period=16):
         """The class needs to locate the data granules. We assume that
         these are available somewhere in the filesystem and that we can
         index them by location (MODIS tile name e.g. "h19v10") and
@@ -233,7 +233,7 @@ class BHRObservations(RetrieveBRDFDescriptors):
         #                  mcd43a2_dir)
         self._get_emulator(emulator)
         self.dates = sorted(self.a1_granules.keys())
-        self.dates = self.dates[::16]
+        self.dates = self.dates[::period]
         self.bands_per_observation = {}
         for the_date in self.dates:
             self.bands_per_observation[the_date] = 2 # 2 bands
@@ -268,7 +268,7 @@ class BHRObservations(RetrieveBRDFDescriptors):
         if not os.path.exists(emulator):
             raise IOError("The emulator {} doesn't exist!".format(emulator))
         # Assuming emulator is in an pickle file...
-        self.emulator = cPickle.load(open(emulator, 'rb'))
+        self.emulator = cPickle.load(open(emulator, 'rb'), encoding='latin1')
 
     def get_band_data(self, the_date, band_no):
 

@@ -30,15 +30,17 @@ import scipy.sparse as sp
 # from scipy.spatial.distance import squareform, pdist
 
 # from utils import  matrix_squeeze, spsolve2, reconstruct_array
-from inference import variational_kalman
-from inference import variational_kalman_multiband
-from inference import locate_in_lut, run_emulator, create_uncertainty
-from inference import create_linear_observation_operator
-from inference import create_nonlinear_observation_operator
-from inference import iterate_time_grid
-from inference import propagate_information_filter_LAI # eg
-from inference import hessian_correction
-from inference.kf_tools import propagate_and_blend_prior
+
+from .inference import variational_kalman
+from .inference import variational_kalman_multiband
+from .inference import locate_in_lut, run_emulator, create_uncertainty
+from .inference import create_linear_observation_operator
+from .inference import create_nonlinear_observation_operator
+from .inference import iterate_time_grid
+from .inference import propagate_information_filter_LAI # eg
+from .inference import hessian_correction
+from .inference import hessian_correction_multiband
+from .inference.kf_tools import propagate_and_blend_prior
 
 # Set up logging
 
@@ -98,6 +100,7 @@ class LinearKalman (object):
                           trajectory_model, trajectory_uncertainty,
                           prior=self.prior, date=self.current_timestep,
                           state_propagator=self._state_propagator)
+
         return x_forecast, P_forecast, P_forecast_inverse
 
     def _set_plot_view(self, diag_string, timestep, obs):
@@ -218,6 +221,7 @@ class LinearKalman (object):
             for band in range(self.observations.bands_per_observation[step]):
                 current_data.append(self.observations.get_band_data(step, 
                                                                     band))
+
             x_analysis, P_analysis, P_analysis_inverse, innovations = \
                 self.do_all_bands(step, current_data, x_forecast, P_forecast,
                                   P_forecast_inverse)
@@ -300,12 +304,13 @@ class LinearKalman (object):
             
         # Once we have converged...
         # Correct hessian for higher order terms
-        # TODO THIS WILL NOT WORK AS IT IS!!!
-        #P_correction = hessian_correction(data.emulator, x_analysis,
-        #                                  data.uncertainty, innovations,
-        #                                  data.mask, self.state_mask, band,
-        #                                  self.n_params)
-        #P_analysis_inverse = P_analysis_inverse - P_correction
+        #split_points = [m.sum( ) for m in MASK]
+        INNOVATIONS = np.split(innovations, n_bands)
+        P_correction = hessian_correction_multiband(data.emulator, x_analysis,
+                                                    UNC, INNOVATIONS, MASK,
+                                                    self.state_mask, n_bands,
+                                                    self.n_params)
+        P_analysis_inverse = P_analysis_inverse - P_correction
 
         # Done with this observation, move along...
         
