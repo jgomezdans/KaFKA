@@ -345,7 +345,7 @@ def no_propagation(x_analysis, P_analysis,
     inverse covariance matrix)"""
 
     x_prior, c_prior, c_inv_prior = tip_prior()
-    n_pixels = len(x_analysis)/7
+    n_pixels = len(x_analysis)//7
     x_forecast = np.array([x_prior for i in range(n_pixels)]).flatten()
     c_inv_prior_mat = [c_inv_prior for n in range(n_pixels)]
     P_forecast_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
