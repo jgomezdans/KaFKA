@@ -33,8 +33,6 @@ from kafka.inference import propagate_information_filter_LAI
 from kafka.inference import no_propagation
 from kafka.inference import create_prosail_observation_operator
 
-
-
 # Probably should be imported from somewhere else, but I can't see
 # where from ATM... No biggy
 
@@ -127,18 +125,15 @@ class SAILPrior(object):
         # Presumably, self._inference_prior has some method to retrieve 
         # a bunch of files for a given date...
         n_pixels = self.state_mask.sum()
-        x0 = np.array([self.mean for i in xrange(n_pixels)]).flatten()
+        x0 = np.array([self.mean for i in range(n_pixels)]).flatten()
         if inv_cov:
-            inv_covar_list = [self.inv_covar for m in xrange(n_pixels)]
+            inv_covar_list = [self.inv_covar for m in range(n_pixels)]
             inv_covar = block_diag(inv_covar_list, dtype=np.float32)
             return x0, inv_covar
         else:
-            covar_list = [self.covar for m in xrange(n_pixels)]
+            covar_list = [self.covar for m in range(n_pixels)]
             covar = block_diag(covar_list, dtype=np.float32)
             return x0, covar
-        
-        
-        
 
 class KafkaOutputMemory(object):
     """A very simple class to output the state."""
@@ -160,12 +155,13 @@ if __name__ == "__main__":
     
     start_time = "2017001"
     
-    emulator_folder = "/home/ucfafyi/DATA/Multiply/emus/sail/"
+    #emulator_folder = "/home/ucfafyi/DATA/Multiply/emus/sail/"
+    emulator_folder = "/home/glopez/Multiply/src/py36/emus/sail"
     
-    data_folder = "/data/nemesis/S2_data/30/S/WJ/"
+    #data_folder = "/data/nemesis/S2_data/30/S/WJ/"
+    data_folder = "/data/001_planet_sentinel_study/sentinel/30/S/WJ"
 
     state_mask = "./Barrax_pivots.tif"
-
     
     s2_observations = Sentinel2Observations(data_folder,
                                             emulator_folder, 
@@ -202,7 +198,4 @@ if __name__ == "__main__":
                      for x in range(0, num_days, 2)))
     kf.run(time_grid, x_forecast, None, P_forecast_inv,
            iter_obs_op=True)
-    
-
-
     
