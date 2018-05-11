@@ -60,6 +60,18 @@ def hessian_correction(gp, x0, R_mat, innovation, mask, state_mask, band,
     return hessian_corr
 
 
+def hessian_correction_multiband(gp, x0, R_mats, innovations, masks, state_mask, n_bands,
+                       nparams):
+    """ Non linear correction for the Hessian of the cost function. This handles
+    multiple bands. """
+    little_hess_cor = []
+    for R, innovation, mask, band in zip(R_mats, innovations, masks, range(n_bands)):
+        little_hess_cor.append(hessian_correction(gp, x0, R, innovation, mask, state_mask, band,
+                       nparams))
+    hessian_corr = sum(little_hess_cor) #block_diag(little_hess_cor)
+    return hessian_corr
+
+
 def blend_prior(prior_mean, prior_cov_inverse, x_forecast, P_forecast_inverse):
     """
     combine prior mean and inverse covariance with the mean and inverse covariance
@@ -114,8 +126,8 @@ def tip_prior_full(prior):
     # the real code when we know what the priors look like.
     x_prior, c_prior, c_inv_prior = tip_prior()
     n_pixels = prior['n_pixels']
-    mean = np.array([x_prior for i in xrange(n_pixels)]).flatten()
-    c_inv_prior_mat = [c_inv_prior for n in xrange(n_pixels)]
+    mean = np.array([x_prior for i in range(n_pixels)]).flatten()
+    c_inv_prior_mat = [c_inv_prior for n in range(n_pixels)]
     prior_cov_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
 
     return mean, prior_cov_inverse
@@ -282,19 +294,21 @@ def propagate_information_filter_LAI(x_analysis, P_analysis,
                                      M_matrix, Q_matrix,
                                      prior=None, state_propagator=None, date=None):
 
-
     x_forecast = M_matrix.dot(x_analysis)
     x_prior, c_prior, c_inv_prior = tip_prior()
-    n_pixels = len(x_analysis)/7
-    x0 = np.array([x_prior for i in xrange(n_pixels)]).flatten()
+    n_pixels = len(x_analysis)//7
+    x0 = np.array([x_prior for i in range(n_pixels)]).flatten()
     x0[6::7] = x_forecast[6::7] # Update LAI
-    print( "LAI:", -2*np.log(x_forecast[6::7]) )
-    lai_post_cov = P_analysis_inverse.diagonal()
-    c_inv_prior_mat = []
-    for n in xrange(n_pixels):
-        c_inv_prior[6,6] =  lai_post_cov[n]
-        c_inv_prior_mat.append(c_inv_prior)
+    lai_post_cov = P_analysis_inverse.diagonal()[6::7]
+    lai_Q = Q_matrix.diagonal()[6::7]
 
+    c_inv_prior_mat = []
+    for n in range(n_pixels):
+        # inflate uncertainty
+        lai_inv_cov = 1.0/((1.0/lai_post_cov[n])+lai_Q[n])
+        little_P_forecast_inverse = c_inv_prior.copy()
+        little_P_forecast_inverse[6, 6] = lai_inv_cov
+        c_inv_prior_mat.append(little_P_forecast_inverse)
     P_forecast_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
 
     return x0, None, P_forecast_inverse
@@ -332,8 +346,8 @@ def no_propagation(x_analysis, P_analysis,
 
     x_prior, c_prior, c_inv_prior = tip_prior()
     n_pixels = len(x_analysis)/7
-    x_forecast = np.array([x_prior for i in xrange(n_pixels)]).flatten()
-    c_inv_prior_mat = [c_inv_prior for n in xrange(n_pixels)]
+    x_forecast = np.array([x_prior for i in range(n_pixels)]).flatten()
+    c_inv_prior_mat = [c_inv_prior for n in range(n_pixels)]
     P_forecast_inverse=block_diag(c_inv_prior_mat, dtype=np.float32)
 
     return x_forecast, None, P_forecast_inverse
