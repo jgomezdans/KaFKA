@@ -5,9 +5,10 @@ import logging
 logging.basicConfig( 
     level=logging.getLevelName(logging.DEBUG), 
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    filename="the_log.log")
+    filename="the_log_propagation_py3.log")
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 import numpy as np
 
 
@@ -32,6 +33,7 @@ from kafka import LinearKalman
 from kafka.inference import block_diag
 from kafka.inference import propagate_information_filter_LAI
 from kafka.inference import no_propagation
+from kafka.inference import propagate_information_filter_approx_SLOW
 from kafka.inference import create_nonlinear_observation_operator
 
 
@@ -117,20 +119,18 @@ class JRCPrior(object):
         return x0, little_p, inv_p
 
     def process_prior ( self, time, inv_cov=True):
-        # Presumably, self._inference_prior has some method to retrieve 
+        # Presumably, self._inference_prior has some method to retrieve
         # a bunch of files for a given date...
         n_pixels = self.state_mask.sum()
-        x0 = np.array([self.mean for i in xrange(n_pixels)]).flatten()
+        x0 = np.array([self.mean for i in range(n_pixels)]).flatten()
         if inv_cov:
-            inv_covar_list = [self.inv_covar for m in xrange(n_pixels)]
+            inv_covar_list = [self.inv_covar for m in range(n_pixels)]
             inv_covar = block_diag(inv_covar_list, dtype=np.float32)
             return x0, inv_covar
         else:
-            covar_list = [self.covar for m in xrange(n_pixels)]
+            covar_list = [self.covar for m in range(n_pixels)]
             covar = block_diag(covar_list, dtype=np.float32)
             return x0, covar
-        
-        
 
 class KafkaOutputMemory(object):
     """A very simple class to output the state."""
@@ -144,62 +144,74 @@ class KafkaOutputMemory(object):
             solution[param] = x_analysis[ii::7]
         self.output[timestep] = solution
 
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc:
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else:
+            raise
 
 if __name__ == "__main__":
-    
+
+    propagator = propagate_information_filter_LAI
     parameter_list = ["w_vis", "x_vis", "a_vis",
                      "w_nir", "x_nir", "a_nir", "TeLAI"]
     
     tile = "h17v05"
     start_time = "2017001"
-    
+
+
+    path = Path("/tmp/", "test_oot")
+    path.mkdir(exist_ok=True, parents=True) 
+
     emulator = "./SAIL_emulator_both_500trainingsamples.pkl"
     
     if os.path.exists("/storage/ucfajlg/Ujia/MCD43/"):
         mcd43a1_dir = "/storage/ucfajlg/Ujia/MCD43/"
     else:
         mcd43a1_dir="/data/selene/ucfajlg/Ujia/MCD43/"
+    #mcd43a1_dir="/data/selene/ucfajlg/Aurade_MODIS/MCD43"
     ####tilewidth = 75
     ###n_pixels = tilewidth*tilewidth
     mask = np.zeros((2400,2400),dtype=np.bool8)
-    #mask[900:940, 1300:1340] = True # Alcornocales
-    #mask[640:700, 1400:1500] = True # Campinha
+    mask[900:940, 1300:1340] = True # Alcornocales
+    mask[640:700, 1400:1500] = True # Campinha
     mask[650:730, 1180:1280] = True # Arros
+    #mask[690:700, 1205:1215] = True # Arros
     #mask[700:705, 1200] = True
 
     bhr_data =  BHRObservations(emulator, tile, mcd43a1_dir, start_time,
-                                end_time=None, mcd43a2_dir=None)
+                                end_time=None, mcd43a2_dir=None,
+                                period=16)
 
     projection, geotransform = bhr_data.define_output()
 
-    output = KafkaOutput(parameter_list, geotransform, projection, "/tmp/")
-    
-    
-
+    output = KafkaOutput(parameter_list, geotransform, projection,
+                         path.as_posix())
 
 
     the_prior = JRCPrior(parameter_list, mask)
 
-
-
     
     kf = LinearKalman(bhr_data, output, mask, 
-                      create_nonlinear_observation_operator,parameter_list,
-                      state_propagation=None,
-                      prior=the_prior,
+                      create_nonlinear_observation_operator, parameter_list,
+                      state_propagation=propagator,
+                      prior=None,
                       linear=False)
 
     # Get starting state... We can request the prior object for this
     x_forecast, P_forecast_inv = the_prior.process_prior(None)
     
     Q = np.zeros_like(x_forecast)
-    Q[6::7] = 0.025
+    Q[6::7] = 0.04
     
     kf.set_trajectory_model()
     kf.set_trajectory_uncertainty(Q)
-    
+
     base = datetime(2017,1,1)
-    num_days = 360
+    num_days = 366
     time_grid = list((base + timedelta(days=x) 
                   for x in range(0, num_days, 16)))
     kf.run(time_grid, x_forecast, None, P_forecast_inv, iter_obs_op=True)
