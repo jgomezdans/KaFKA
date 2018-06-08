@@ -368,12 +368,13 @@ class KafkaOutput(object):
 
 
 if __name__ == "__main__":
-    emulator = "../../SAIL_emulator_both_500trainingsamples.pkl"
+    emulator = "./SAIL_emulator_both_500trainingsamples.pkl"
     tile = "h17v05"
     start_time = "2017001"
     mcd43a1_dir = "/data/selene/ucfajlg/Ujia/MCD43/"
+    
     bhr_data = BHRObservations(emulator, tile, mcd43a1_dir, start_time,
                                end_time=None, mcd43a2_dir=None, 
-                                ulx=1000, uly=1000, lrx=1400, lry=1400)
+                                ulx=1180, uly=650, lrx=1280, lry=730)
     vis = bhr_data.get_band_data(datetime.datetime(2017, 8, 13), 0)
     nir = bhr_data.get_band_data(datetime.datetime(2017, 8, 13), 1)

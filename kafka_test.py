@@ -175,17 +175,17 @@ if __name__ == "__main__":
     #mcd43a1_dir="/data/selene/ucfajlg/Aurade_MODIS/MCD43"
     ####tilewidth = 75
     ###n_pixels = tilewidth*tilewidth
-    mask = np.zeros((2400,2400),dtype=np.bool8)
-    mask[900:940, 1300:1340] = True # Alcornocales
-    mask[640:700, 1400:1500] = True # Campinha
-    mask[650:730, 1180:1280] = True # Arros
+    mask = np.zeros((80, 100),dtype=np.bool8)
+    mask[:, :] = True
+    #mask[900:940, 1300:1340] = True # Alcornocales
+    #mask[640:700, 1400:1500] = True # Campinha
+    #mask[650:730, 1180:1280] = True # Arros
     #mask[690:700, 1205:1215] = True # Arros
     #mask[700:705, 1200] = True
-
     bhr_data =  BHRObservations(emulator, tile, mcd43a1_dir, start_time,
                                 end_time=None, mcd43a2_dir=None,
-                                period=16)
-
+                                period=16, ulx=1180, uly=650, 
+                                           lrx=1280, lry=730)
     projection, geotransform = bhr_data.define_output()
 
     output = KafkaOutput(parameter_list, geotransform, projection,
