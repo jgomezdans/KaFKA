@@ -375,5 +375,5 @@ if __name__ == "__main__":
     bhr_data = BHRObservations(emulator, tile, mcd43a1_dir, start_time,
                                end_time=None, mcd43a2_dir=None, 
                                 ulx=1000, uly=1000, lrx=1400, lry=1400)
-    vis = bhr_data.get_band_data(datetime.datetime(2017, 8, 1), "vis")
-    nir = bhr_data.get_band_data(datetime.datetime(2017, 8, 1), "nir")
+    vis = bhr_data.get_band_data(datetime.datetime(2017, 8, 13), 0)
+    nir = bhr_data.get_band_data(datetime.datetime(2017, 8, 13), 1)
