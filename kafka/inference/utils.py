@@ -133,8 +133,9 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     is achieved by using the `state_mapper` to select which bits
     of the state vector (and model Jacobian) are used."""
     LOG.info("Creating the ObsOp for band %d" % band)
-    n_times = x_forecast.shape[0] / n_params
+    n_times = int( x_forecast.shape[0] / n_params )
     good_obs = mask.sum()
+
     H_matrix = sp.lil_matrix((n_times, n_params * n_times),
                              dtype=np.float32)
     H0 = np.zeros(n_times, dtype=np.float32)
@@ -171,6 +172,52 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     LOG.info("\tDone!")
 
     return (H0, H_matrix.tocsr())
+
+
+
+def create_prosail_observation_operator(n_params, emulator, metadata,
+                                          mask, state_mask,  x_forecast, band):
+    """Using an emulator of the nonlinear model around `x_forecast`.
+    This case is quite special, as I'm focusing on a BHR SAIL
+    version (or the JRC TIP), which have spectral parameters
+    (e.g. leaf single scattering albedo in two bands, etc.). This
+    is achieved by using the `state_mapper` to select which bits
+    of the state vector (and model Jacobian) are used."""
+    LOG.info("Creating the ObsOp for band %d" % band)
+    n_times = x_forecast.shape[0] / n_params
+    good_obs = mask.sum()
+    H_matrix = sp.lil_matrix((n_times, n_params * n_times),
+                             dtype=np.float32)
+    H0 = np.zeros(n_times, dtype=np.float32)
+
+
+
+    # This loop can be JIT'ed
+    x0 = np.zeros((n_times, n_params))
+    for i, m in enumerate(mask[state_mask].flatten()):
+        if m:
+            x0[i, :] = x_forecast[(n_params*i):(n_params*(i+1))]
+    LOG.info("Running emulators")
+    # Calls the run_emulator method that only does different vectors
+    # It might be here that we do some sort of clustering
+
+    H0_, dH = run_emulator(emulator, x0[mask[state_mask]])
+
+    LOG.info("Storing emulators in H matrix")
+    # This loop can be JIT'ed too
+    n = 0
+    for i, m in enumerate(mask[state_mask].flatten()):
+        if m:
+            H_matrix[i,  (n_params*i):(n_params*(i+1))] = dH[n]
+            H0[i] = H0_[n]
+            n += 1
+
+    LOG.info("\tDone!")
+
+    return (H0, H_matrix.tocsr())
+
+
+
 
 
 def locate_in_lut(lut, im):

@@ -22,7 +22,7 @@ def test_iterate_time_grid():
     base_date = datetime.datetime(2007, 1, 1)
     the_dates = [base_date + i*datetime.timedelta(days=1) for i in range(
         1, 365+8, 8)]
-    print time_grid
+    print(time_grid)
     timesteps_good = [datetime.datetime(2007, 7, 17),
                       datetime.datetime(2007, 8, 2),
                       datetime.datetime(2007, 8, 18)]

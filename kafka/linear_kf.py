@@ -30,15 +30,17 @@ import scipy.sparse as sp
 # from scipy.spatial.distance import squareform, pdist
 
 # from utils import  matrix_squeeze, spsolve2, reconstruct_array
-from inference import variational_kalman
-from inference import variational_kalman_multiband
-from inference import locate_in_lut, run_emulator, create_uncertainty
-from inference import create_linear_observation_operator
-from inference import create_nonlinear_observation_operator
-from inference import iterate_time_grid
-from inference import propagate_information_filter_LAI # eg
-from inference import hessian_correction
-from inference.kf_tools import propagate_and_blend_prior
+
+from .inference import variational_kalman
+from .inference import variational_kalman_multiband
+from .inference import locate_in_lut, run_emulator, create_uncertainty
+from .inference import create_linear_observation_operator
+from .inference import create_nonlinear_observation_operator
+from .inference import iterate_time_grid
+from .inference import propagate_information_filter_LAI # eg
+from .inference import hessian_correction
+from .inference import hessian_correction_multiband
+from .inference.kf_tools import propagate_and_blend_prior
 
 # Set up logging
 
@@ -63,6 +65,7 @@ class LinearKalman (object):
     def __init__(self, observations, output, state_mask,
                  create_observation_operator, parameters_list,
                  state_propagation=propagate_information_filter_LAI,
+                 band_mapper=None,
                  linear=True, diagnostics=True, prior=None):
         """The class creator takes (i) an observations object, (ii) an output
         writer object, (iii) the state mask (a boolean 2D array indicating which
@@ -84,6 +87,15 @@ class LinearKalman (object):
         self._state_propagator = state_propagation
         self._advance = propagate_and_blend_prior
         self.prior = prior
+        # The band mapper allows some parameters to be defined per band,
+        # such as optical properties per band and so on. The format for
+        # this is a list, where each element is an array with the state
+        # elements that belong to that particular band (the band being
+        # the position in the list).
+        self.band_mapper = band_mapper
+        # e.g band_mapper for JRC-TIP: [np.array([0, 1, 6, 2]),
+        #                               np.array([3, 4, 6, 5])]
+        
         # this allows you to pass additional information with prior needed by
         # specific functions. All priors need a dictionary with ['function'] key.
         # Other keys are optional
@@ -98,6 +110,7 @@ class LinearKalman (object):
                           trajectory_model, trajectory_uncertainty,
                           prior=self.prior, date=self.current_timestep,
                           state_propagator=self._state_propagator)
+
         return x_forecast, P_forecast, P_forecast_inverse
 
     def _set_plot_view(self, diag_string, timestep, obs):
@@ -202,7 +215,7 @@ class LinearKalman (object):
                                      is_robust=is_robust, diag_str=diag_str)
             LOG.info("Dumping results to disk")
             self.output.dump_data(timestep, x_analysis, P_analysis,
-                                  P_analysis_inverse, self.state_mask)
+                                  P_analysis_inverse, self.state_mask, self.n_params)
 
     def assimilate_multiple_bands(self, locate_times, x_forecast, P_forecast,
                    P_forecast_inverse,
@@ -218,7 +231,7 @@ class LinearKalman (object):
             for band in range(self.observations.bands_per_observation[step]):
                 current_data.append(self.observations.get_band_data(step, 
                                                                     band))
-                
+
             x_analysis, P_analysis, P_analysis_inverse, innovations = \
                 self.do_all_bands(step, current_data, x_forecast, P_forecast,
                                   P_forecast_inverse)
@@ -243,7 +256,6 @@ class LinearKalman (object):
         x_prev = x_forecast*1.
         n_iter = 1
         n_bands = len(current_data)
-        
         while not_converged:
             Y = []
             MASK = []
@@ -255,7 +267,7 @@ class LinearKalman (object):
                 # Also extract single band information from nice package
                 # this allows us to use the same interface as current
                 # Deferring processing to a new solver method in solvers.py
-                
+                # Note that we could well do with passing `self.band_mapper`
                 H_matrix_= self._create_observation_operator(self.n_params,
                                                          data.emulator,
                                                          data.metadata,
@@ -302,15 +314,16 @@ class LinearKalman (object):
             
         # Once we have converged...
         # Correct hessian for higher order terms
-        # TODO THIS WILL NOT WORK AS IT IS!!!
-        #P_correction = hessian_correction(data.emulator, x_analysis,
-        #                                  data.uncertainty, innovations,
-        #                                  data.mask, self.state_mask, band,
-        #                                  self.n_params)
-        #P_analysis_inverse = P_analysis_inverse - P_correction
+        #split_points = [m.sum( ) for m in MASK]
+        INNOVATIONS = np.split(innovations, n_bands)
+        P_correction = hessian_correction_multiband(data.emulator, x_analysis,
+                                                    UNC, INNOVATIONS, MASK,
+                                                    self.state_mask, n_bands,
+                                                    self.n_params, self.band_mapper)
+        P_analysis_inverse = P_analysis_inverse - P_correction
 
         # Done with this observation, move along...
-
+        
         return x_analysis, P_analysis, P_analysis_inverse, innovations
                 
     def assimilate(self, locate_times, x_forecast, P_forecast,
@@ -412,7 +425,6 @@ class LinearKalman (object):
         plt.figure()
         plt.imshow(M[650:730, 1180:1280], interpolation="nearest", vmin=0.1, vmax=0.5)
         plt.title("Band: %d, Date:"%band + timestep.strftime("%Y-%m-%d"))
-        import ipdb; ipdb.set_trace()
         
         return x_analysis, P_analysis, P_analysis_inverse, innovations
 

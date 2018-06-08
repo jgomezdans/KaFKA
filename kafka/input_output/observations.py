@@ -38,20 +38,18 @@ M*D09GA
 MCD43A1/2 -> See BRDF_descriptors!
 
 """
-
-import cPickle
 import datetime
+import _pickle as cPickle
 import glob
 import os
 from collections import namedtuple
 
+from BRDF_descriptors import RetrieveBRDFDescriptors
+
 import gdal
 
 import numpy as np
-
-from BRDF_descriptors import RetrieveBRDFDescriptors
-
-#from kernels import Kernels
+#  from kernels import Kernels
 
 import scipy.sparse as sp
 from scipy.ndimage import zoom
@@ -211,8 +209,8 @@ class SynergyKernels(object):
 
 class BHRObservations(RetrieveBRDFDescriptors):
     def __init__(self, emulator, tile, mcd43a1_dir,
-                 start_time, ulx=0, uly=0, dx=2400, dy=2400, end_time=None,
-                 mcd43a2_dir=None):
+                 start_time, ulx=0, uly=0, lrx=2400, lry=2400, end_time=None,
+                 mcd43a2_dir=None, period=16):
         """The class needs to locate the data granules. We assume that
         these are available somewhere in the filesystem and that we can
         index them by location (MODIS tile name e.g. "h19v10") and
@@ -225,19 +223,23 @@ class BHRObservations(RetrieveBRDFDescriptors):
 
         # Call the constructor first
         # Python2
-        RetrieveBRDFDescriptors.__init__(self, tile,
-                                         mcd43a1_dir, start_time, end_time,
-                                         mcd43a2_dir)
+        if ulx == 0 and uly == 0 and lrx == 2400 and lry == 2400:
+            roi = None
+        else:
+            roi = [ulx, uly, lrx, lry]
+        # RetrieveBRDFDescriptors.__init__(self, tile,
+        #                                 mcd43a1_dir, start_time, end_time,
+        #                                 mcd43a2_dir, roi=roi)
         # Python3
-        #  super().__init__(tile, mcd43a1_dir, start_time, end_time,
-        #                  mcd43a2_dir)
+        super().__init__(tile, mcd43a1_dir, start_time, end_time,
+                          mcd43a2_dir, roi=roi)
         self._get_emulator(emulator)
         self.dates = sorted(self.a1_granules.keys())
-        self.dates = self.dates[::16]
+        self.dates = self.dates[::period]
         self.bands_per_observation = {}
         for the_date in self.dates:
             self.bands_per_observation[the_date] = 2 # 2 bands
-        
+
         a1_temp = {}
         a2_temp = {}
         for k in self.dates:
@@ -249,8 +251,8 @@ class BHRObservations(RetrieveBRDFDescriptors):
                               1: "nir"}
         self.ulx = ulx
         self.uly = uly
-        self.dx = dx
-        self.dy = dy
+        self.lrx = lrx
+        self.lry = lry
 
     def define_output(self):
         reference_fname = self.a1_granules[self.dates[0]]
@@ -268,7 +270,7 @@ class BHRObservations(RetrieveBRDFDescriptors):
         if not os.path.exists(emulator):
             raise IOError("The emulator {} doesn't exist!".format(emulator))
         # Assuming emulator is in an pickle file...
-        self.emulator = cPickle.load(open(emulator, 'rb'))
+        self.emulator = cPickle.load(open(emulator, 'rb'), encoding='latin1')
 
     def get_band_data(self, the_date, band_no):
 
@@ -277,12 +279,6 @@ class BHRObservations(RetrieveBRDFDescriptors):
         if retval is None:  # No data on this date
             return None
         kernels, mask, qa_level = retval
-        mask = mask[self.uly:(self.uly + self.dy),
-                    self.ulx:(self.ulx + self.dx)]
-        qa_level = qa_level[self.uly:(self.uly + self.dy),
-                            self.ulx:(self.ulx + self.dx)]
-        kernels = kernels[:, self.uly:(self.uly + self.dy),
-                          self.ulx:(self.ulx + self.dx)]
         bhr = np.where(mask,
                        kernels * to_BHR[:, None, None], np.nan).sum(axis=0)
         R_mat = np.zeros_like(bhr)
@@ -298,29 +294,31 @@ class BHRObservations(RetrieveBRDFDescriptors):
         bhr_data = BHR_data(bhr, mask, R_mat_sp, None, self.emulator)
         return bhr_data
 
-    
+
 class BHRObservationsTest(object):
     """A class to test BHR data "one pixel at a time". In essence, one only needs
-    to define a self.dates dictionary (keys are datetime objects), and a 2 element
-    list or array with the VIS/NIR albedo. then we need the get_band_method..."""
+    to define a self.dates dictionary (keys are datetime objects), and a 2
+    element list or array with the VIS/NIR albedo. then we need the
+    get_band_method..."""
+
     def __init__(self, dates, vis_albedo, nir_albedo):
         assert (len(dates) == len(vis_albedo))
         assert (len(dates) == len(nir_albedo))
         self.dates = {}
         for ii, the_date in enumerate(dates):
             self.dates[the_date] = [vis_albedo[ii], nir_albedo[ii]]
-            
+
         self.bands_per_observation = {}
         for the_date in self.dates:
             self.bands_per_observation[the_date] = 2 # 2 bands
-    
+
     def get_band_data(self, the_date, band_no):
         bhr = self.dates[the_date][band_no]
         mask = np.array(1, dtype=np.bool)
         R_mat = 1./(np.maximum(2.5e-3, bhr * 0.05))**2
-        
-    
-        
+
+
+
 
 class KafkaOutput(object):
     """A very simple class to output the state."""
@@ -337,7 +335,7 @@ class KafkaOutput(object):
         self.parameter_list = parameter_list
 
     def dump_data(self, timestep, x_analysis, P_analysis, P_analysis_inv,
-                  state_mask):
+                  state_mask, n_params):
         drv = gdal.GetDriverByName(self.fmt)
         for ii, param in enumerate(self.parameter_list):
             fname = os.path.join(self.folder, "%s_%s.tif" %
@@ -346,11 +344,12 @@ class KafkaOutput(object):
                                 state_mask.shape[0], 1,
                                 gdal.GDT_Float32, ['COMPRESS=DEFLATE',
                                                    'BIGTIFF=YES',
-                                                   'PREDICTOR=1', 'TILED=YES'])
+                                                   'PREDICTOR=1',
+                                                   'TILED=YES'])
             dst_ds.SetProjection(self.projection)
             dst_ds.SetGeoTransform(self.geotransform)
             A = np.zeros(state_mask.shape, dtype=np.float32)
-            A[state_mask] = x_analysis[ii::7]
+            A[state_mask] = x_analysis[ii::n_params]
             dst_ds.GetRasterBand(1).WriteArray(A)
         for ii, param in enumerate(self.parameter_list):
             fname = os.path.join(self.folder, "%s_%s_unc.tif" %
@@ -363,17 +362,18 @@ class KafkaOutput(object):
             dst_ds.SetProjection(self.projection)
             dst_ds.SetGeoTransform(self.geotransform)
             A = np.zeros(state_mask.shape, dtype=np.float32)
-            A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::7])
+            A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::n_params])
             dst_ds.GetRasterBand(1).WriteArray(A)
 
 
 
 if __name__ == "__main__":
-    emulator = "../SAIL_emulator_both_500trainingsamples.pkl"
+    emulator = "../../SAIL_emulator_both_500trainingsamples.pkl"
     tile = "h17v05"
     start_time = "2017001"
-    mcd43a1_dir = "/storage/ucfajlg/Ujia/MCD43/"
+    mcd43a1_dir = "/data/selene/ucfajlg/Ujia/MCD43/"
     bhr_data = BHRObservations(emulator, tile, mcd43a1_dir, start_time,
-                               end_time=None, mcd43a2_dir=None)
+                               end_time=None, mcd43a2_dir=None, 
+                                ulx=1000, uly=1000, lrx=1400, lry=1400)
     vis = bhr_data.get_band_data(datetime.datetime(2017, 8, 1), "vis")
     nir = bhr_data.get_band_data(datetime.datetime(2017, 8, 1), "nir")
