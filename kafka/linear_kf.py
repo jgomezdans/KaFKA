@@ -321,7 +321,7 @@ class LinearKalman (object):
         #                                            UNC, INNOVATIONS, MASK,
         #                                            self.state_mask, n_bands,
         #                                            self.n_params, self.band_mapper)
-        #
+        
         #P_analysis_inverse = P_analysis_inverse - P_correction
 
         # Done with this observation, move along...
