@@ -253,6 +253,14 @@ class BHRObservations(RetrieveBRDFDescriptors):
         self.uly = uly
         self.lrx = lrx
         self.lry = lry
+        self.roi = [ulx, uly, lrx, lry]
+        
+    def apply_roi(self, ulx, uly, lrx, lry):
+        self.ulx = ulx
+        self.uly = uly
+        self.lrx = lrx
+        self.lry = lry
+        self.roi = [ulx, uly, lrx, lry]
 
     def define_output(self):
         reference_fname = self.a1_granules[self.dates[0]]
@@ -267,6 +275,7 @@ class BHRObservations(RetrieveBRDFDescriptors):
         return proj, new_geoT.tolist()
 
     def _get_emulator(self, emulator):
+        
         if not os.path.exists(emulator):
             raise IOError("The emulator {} doesn't exist!".format(emulator))
         # Assuming emulator is in an pickle file...
@@ -275,9 +284,11 @@ class BHRObservations(RetrieveBRDFDescriptors):
     def get_band_data(self, the_date, band_no):
 
         to_BHR = np.array([1.0, 0.189184, -1.377622])
+
         retval = self.get_brdf_descriptors(band_no, the_date)
         if retval is None:  # No data on this date
             return None
+        
         kernels, mask, qa_level = retval
         bhr = np.where(mask,
                        kernels * to_BHR[:, None, None], np.nan).sum(axis=0)
@@ -323,6 +334,7 @@ class BHRObservationsTest(object):
 class KafkaOutput(object):
     """A very simple class to output the state."""
     def __init__(self, parameter_list, geotransform, projection, folder,
+                 prefix=None,
                  fmt="GTiff"):
         """The inference engine works on tiles, so we get the tilewidth
         (we assume the tiles are square), the GDAL-friendly geotransform
@@ -333,13 +345,20 @@ class KafkaOutput(object):
         self.folder = folder
         self.fmt = fmt
         self.parameter_list = parameter_list
+        self.prefix = prefix
 
     def dump_data(self, timestep, x_analysis, P_analysis, P_analysis_inv,
                   state_mask, n_params):
+        
         drv = gdal.GetDriverByName(self.fmt)
         for ii, param in enumerate(self.parameter_list):
-            fname = os.path.join(self.folder, "%s_%s.tif" %
-                                 (param, timestep.strftime("A%Y%j")))
+            if self.prefix is None:
+                fname = os.path.join(self.folder, "%s_%s.tif" %
+                                    (param, timestep.strftime("A%Y%j")))
+            else:
+                fname = os.path.join(self.folder, "%s_%s_%s.tif" %
+                                    (param, timestep.strftime("A%Y%j"),
+                                     self.prefix))
             dst_ds = drv.Create(fname, state_mask.shape[1],
                                 state_mask.shape[0], 1,
                                 gdal.GDT_Float32, ['COMPRESS=DEFLATE',
@@ -352,8 +371,13 @@ class KafkaOutput(object):
             A[state_mask] = x_analysis[ii::n_params]
             dst_ds.GetRasterBand(1).WriteArray(A)
         for ii, param in enumerate(self.parameter_list):
-            fname = os.path.join(self.folder, "%s_%s_unc.tif" %
-                                 (param, timestep.strftime("A%Y%j")))
+            if self.prefix is None:
+                fname = os.path.join(self.folder, "%s_%s_unc.tif" %
+                                    (param, timestep.strftime("A%Y%j")))
+            else:
+                fname = os.path.join(self.folder, "%s_%s_%s_unc.tif" %
+                                    (param, timestep.strftime("A%Y%j"),
+                                     self.prefix))
             dst_ds = drv.Create(fname, state_mask.shape[1],
                                 state_mask.shape[0], 1,
                                 gdal.GDT_Float32, ['COMPRESS=DEFLATE',
@@ -364,8 +388,7 @@ class KafkaOutput(object):
             A = np.zeros(state_mask.shape, dtype=np.float32)
             A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::n_params])
             dst_ds.GetRasterBand(1).WriteArray(A)
-
-
+        
 
 if __name__ == "__main__":
     emulator = "./SAIL_emulator_both_500trainingsamples.pkl"
