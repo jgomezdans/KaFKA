@@ -161,7 +161,8 @@ def run_kafka(roi, mask, prefix, time_grid, bhr_data,
     [ulx, uly, lrx, lry] = roi
     bhr_data.apply_roi(ulx, uly, lrx, lry)
     projection, geotransform = bhr_data.define_output()
-    output = KafkaOutput(parameter_list, geotransform, projection, "/tmp/",
+    output = KafkaOutput(parameter_list, geotransform, projection,
+                         "/data/selene/ucfajlg/tmp/",
                          prefix=prefix)
 
     if the_prior is None:
@@ -238,8 +239,18 @@ if __name__ == "__main__":
         
     nx = ny = 2400
     them_chunks = [the_chunk for the_chunk in get_chunks(nx, ny, block_size= [256, 256])]
-    from dask.distributed import Client
-    client=Client(scheduler_file="/home/ucfajlg/scheduler.json")
+    from dask.distributed import Client                                                                                          
+    #from distributed.deploy.ssh import SSHCluster
+    #with open('./hosts.txt', 'rb') as f:
+    #    hosts = f.read().split()
+
+    #c = SSHCluster(scheduler_addr=hosts[0], scheduler_port = 8786, worker_addrs=hosts[1:], nthreads=0, nprocs=1,
+    #               ssh_username=None, ssh_port=22, ssh_private_key=None, nohost=False, logdir='/tmp/')
+    client = Client('tcp://tyche.geog.ucl.ac.uk:8786')
+
+
+    #from dask.distributed import Client
+    #client=Client(scheduler_file="/home/ucfajlg/scheduler.json")
     A = client.map (wrapper, them_chunks)
     retval = client.gather(A)
     #B = client.submit(A)
