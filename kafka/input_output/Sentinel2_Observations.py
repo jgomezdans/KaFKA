@@ -76,7 +76,7 @@ S2MSIdata = namedtuple('S2MSIdata',
                      'observations uncertainty mask metadata emulator')
 
 class Sentinel2Observations(object):
-    def __init__(self, parent_folder, emulator_folder, state_mask):
+    def __init__(self, parent_folder, emulator_folder, state_mask, chunk=None):
         if not os.path.exists(parent_folder):
             raise IOError("S2 data folder doesn't exist")
         self.parent = parent_folder
@@ -88,11 +88,18 @@ class Sentinel2Observations(object):
         emulators = glob.glob(os.path.join(self.emulator_folder, "*.pkl"))
         emulators.sort()
         self.emulator_files = emulators
+        self.chunk = chunk
 
     def define_output(self):
-        g = gdal.Open(self.state_mask)
-        proj = g.GetProjection()
-        geoT = np.array(g.GetGeoTransform())
+        try:
+            g = gdal.Open(self.state_mask)
+            proj = g.GetProjection()
+            geoT = np.array(g.GetGeoTransform())
+
+        except:
+            proj = self.state_mask.GetProjection()
+            geoT = np.array(self.state_mask.GetGeoTransform())
+
         #new_geoT = geoT*1.
         #new_geoT[0] = new_geoT[0] + self.ulx*new_geoT[1]
         #new_geoT[3] = new_geoT[3] + self.uly*new_geoT[5]

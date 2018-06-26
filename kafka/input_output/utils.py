@@ -1,6 +1,10 @@
 import numpy as np
 import gdal
 import osr
+"""
+I need to put some utils in here. Seems like the most obvious place...
+"""
+
 
 def get_chunks(nx, ny, block_size= [256, 256]):
     blocks = []

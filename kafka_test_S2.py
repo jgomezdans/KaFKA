@@ -26,7 +26,7 @@ except ImportError:
 
 
 import kafka
-from kafka.input_output import Sentinel2Observations, KafkaOutput
+from kafka.input_output import Sentinel2Observations, KafkaOutput, get_chunks
 from kafka import LinearKalman
 from kafka.inference import block_diag
 from kafka.inference import propagate_information_filter_LAI
@@ -130,20 +130,32 @@ class KafkaOutputMemory(object):
         self.output[timestep] = solution
 
 
-if __name__ == "__main__":
-    
+
+
+def wrapper(the_chunk):
     parameter_list = ['n', 'cab', 'car', 'cbrown', 'cw', 'cm',
                       'lai', 'ala', 'bsoil', 'psoil']
+    this_X, this_Y, nx_valid, ny_valid, chunk = the_chunk
+    ulx = this_X
+    uly = this_Y
+    lrx = this_X + nx_valid
+    lry = this_Y + ny_valid
     
+    roi = [ulx, uly, lrx, lry]
+
     start_time = "2017001"
     
-    #emulator_folder = "/home/ucfafyi/DATA/Multiply/emus/sail/"
-    emulator_folder = "/home/glopez/Multiply/src/py36/emus/sail"
+    emulator_folder = "/home/ucfafyi/DATA/Multiply/emus/sail/"
     
-    #data_folder = "/data/nemesis/S2_data/30/S/WJ/"
-    data_folder = "/data/001_planet_sentinel_study/sentinel/30/S/WJ"
+    
+    data_folder = "/data/nemesis/S2_data/30/S/WJ/"
+    import tempfile
 
-    state_mask = "./Barrax_pivots.tif"
+    temp_name = next(tempfile._get_candidate_names())
+    state_mask = gdal.Translate(f"{temp_name:s}.vrt", "./Barrax_pivots.tif",
+                                srcWin=[this_X, this_Y, nx_valid, ny_valid], 
+                                format="VRT")
+    state_mask = f"{temp_name:s}.vrt"
     
     s2_observations = Sentinel2Observations(data_folder,
                                             emulator_folder, 
@@ -152,7 +164,7 @@ if __name__ == "__main__":
     projection, geotransform = s2_observations.define_output()
 
     output = KafkaOutput(parameter_list, geotransform,
-                         projection, "/tmp/")
+                         projection, "/tmp/", prefix=hex(chunk))
 
     the_prior = SAILPrior(parameter_list, state_mask)
 
@@ -181,3 +193,14 @@ if __name__ == "__main__":
     kf.run(time_grid, x_forecast, None, P_forecast_inv,
            iter_obs_op=True)
     
+if __name__ == "__main__":
+    
+    mask = "./Barrax_pivots.tif"
+    g = gdal.Open(mask)
+    nx, ny = g.RasterXSize, g.RasterYSize
+
+    them_chunks = [the_chunk for the_chunk in get_chunks(nx, ny, block_size= [128, 128])]
+    for chunko in them_chunks:
+        print(chunko)
+        wrapper(chunko)
+
