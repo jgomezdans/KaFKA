@@ -60,3 +60,48 @@ def reproject_image(source_img, target_img, dstSRSs=None):
                   dstSRS=dstSRS)
     return g
 
+def raster_extent_feature(raster):
+    """Gets a geometry with the extent of the raster file in WGS84 coordinates"""
+    raster = gdal.Open(raster)
+    wgs84 = osr.SpatialReference()
+    wgs84.ImportFromEPSG(4326)
+    src = osr.SpatialReference()
+    src.ImportFromWkt(raster.GetProjection())
+    coord_transform = osr.CoordinateTransformation(src, wgs84)
+    
+    transform = raster.GetGeoTransform()
+    pixelWidth = transform[1]
+    pixelHeight = transform[5]
+    cols = raster.RasterXSize
+    rows = raster.RasterYSize
+
+    xLeft = transform[0]
+    yTop = transform[3]
+    xRight = xLeft + cols*pixelWidth
+    yBottom = yTop + rows*pixelHeight
+
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    ring.AddPoint(xLeft, yTop)
+    ring.AddPoint(xLeft, yBottom)
+    ring.AddPoint(xRight, yTop)
+    ring.AddPoint(xRight, yBottom)
+    ring.AddPoint(xLeft, yTop)
+    raster_geometry = ogr.Geometry(ogr.wkbPolygon)
+    raster_geometry.AddGeometry(ring)
+    raster_geometry.Transform(coord_transform)
+    return raster_geometry
+    
+
+def find_overlap_raster_feature(raster, feature):
+    # First, reproject feature to lat/long
+    wgs84 = osr.SpatialReference()
+    wgs84.ImportFromEPSG(4326)
+    src = osr.SpatialReference()
+    src.ImportFromWkt(feature.GetSpatialReference().ExportToWkt())
+    coord_transform = osr.CoordinateTransformation(src, wgs84)
+    feature.Transform(coord_transform)
+    # Now get extent of the raster file in lat/long
+    raster_feature = raster_extent_feature(raster)
+    return feature.Intersects(raster_feature)
+    
+    
