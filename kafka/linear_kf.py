@@ -65,6 +65,7 @@ class LinearKalman (object):
     def __init__(self, observations, output, state_mask,
                  create_observation_operator, parameters_list,
                  state_propagation=propagate_information_filter_LAI,
+                 band_mapper=None,
                  linear=True, diagnostics=True, prior=None):
         """The class creator takes (i) an observations object, (ii) an output
         writer object, (iii) the state mask (a boolean 2D array indicating which
@@ -86,6 +87,15 @@ class LinearKalman (object):
         self._state_propagator = state_propagation
         self._advance = propagate_and_blend_prior
         self.prior = prior
+        # The band mapper allows some parameters to be defined per band,
+        # such as optical properties per band and so on. The format for
+        # this is a list, where each element is an array with the state
+        # elements that belong to that particular band (the band being
+        # the position in the list).
+        self.band_mapper = band_mapper
+        # e.g band_mapper for JRC-TIP: [np.array([0, 1, 6, 2]),
+        #                               np.array([3, 4, 6, 5])]
+        
         # this allows you to pass additional information with prior needed by
         # specific functions. All priors need a dictionary with ['function'] key.
         # Other keys are optional
@@ -257,7 +267,7 @@ class LinearKalman (object):
                 # Also extract single band information from nice package
                 # this allows us to use the same interface as current
                 # Deferring processing to a new solver method in solvers.py
-                
+                # Note that we could well do with passing `self.band_mapper`
                 H_matrix_= self._create_observation_operator(self.n_params,
                                                          data.emulator,
                                                          data.metadata,
@@ -306,11 +316,13 @@ class LinearKalman (object):
         # Correct hessian for higher order terms
         #split_points = [m.sum( ) for m in MASK]
         INNOVATIONS = np.split(innovations, n_bands)
-        P_correction = hessian_correction_multiband(data.emulator, x_analysis,
-                                                    UNC, INNOVATIONS, MASK,
-                                                    self.state_mask, n_bands,
-                                                    self.n_params)
-        P_analysis_inverse = P_analysis_inverse - P_correction
+        # SWitched off for time being
+        #P_correction = hessian_correction_multiband(data.emulator, x_analysis,
+        #                                            UNC, INNOVATIONS, MASK,
+        #                                            self.state_mask, n_bands,
+        #                                            self.n_params, self.band_mapper)
+        
+        #P_analysis_inverse = P_analysis_inverse - P_correction
 
         # Done with this observation, move along...
         
