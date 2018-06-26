@@ -141,8 +141,9 @@ class Sentinel2Observations(object):
                             [sza, saa, vza, vaa]))
         # This should be really using EmulatorEngine...
         emulator_file = self._find_emulator(sza, saa, vza, vaa)
-        emulator = cPickle.load(open (emulator_file, 'rb'))
-        
+        emulator = cPickle.load( open (emulator_file, 'rb'),
+                                 encoding='latin1' )
+
         # Read and reproject S2 surface reflectance
         the_band = self.band_map[band]
         original_s2_file = os.path.join ( current_folder, 
@@ -162,7 +163,10 @@ class Sentinel2Observations(object):
         R_mat_sp = sp.lil_matrix((N, N))
         R_mat_sp.setdiag(1./(R_mat.ravel())**2)
         R_mat_sp = R_mat_sp.tocsr()
-        
-        s2data = S2MSIdata (rho_surface, R_mat_sp, mask, metadata, 
-                            emulator["S2A_MSI_{:02d}".format(emulator_band_map[band])])
+
+        s2_band = bytes("S2A_MSI_{:02d}".format(emulator_band_map[band]), 'latin1' )
+
+        s2data = S2MSIdata (rho_surface, R_mat_sp, mask, metadata, emulator[s2_band] )
+
         return s2data
+
