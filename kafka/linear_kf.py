@@ -256,6 +256,7 @@ class LinearKalman (object):
         x_prev = x_forecast*1.
         n_iter = 1
         n_bands = len(current_data)
+        
         while not_converged:
             Y = []
             MASK = []
@@ -268,18 +269,28 @@ class LinearKalman (object):
                 # this allows us to use the same interface as current
                 # Deferring processing to a new solver method in solvers.py
                 # Note that we could well do with passing `self.band_mapper`
-                H_matrix_= self._create_observation_operator(self.n_params,
-                                                         data.emulator,
-                                                         data.metadata,
-                                                         data.mask,
-                                                         self.state_mask,
-                                                         x_prev,
-                                                         band)
-                H_matrix.append(H_matrix_)
-                Y.append(data.observations)
-                MASK.append(data.mask)
-                UNC.append(data.uncertainty)
-                META.append(data.metadata)
+                n_good_obs = np.sum(data.mask * self.state_mask)
+                if n_good_obs > 0:
+                    H_matrix_= self._create_observation_operator(self.n_params,
+                                                            data.emulator,
+                                                            data.metadata,
+                                                            data.mask,
+                                                            self.state_mask,
+                                                            x_prev,
+                                                            band)
+                    H_matrix.append(H_matrix_)
+                    Y.append(data.observations)
+                    MASK.append(data.mask)
+                    UNC.append(data.uncertainty)
+                    META.append(data.metadata)
+                else:
+                    LOG.info(f"Band {band+1:d} didn't have unmasked pixels")
+            if len(Y) == 0:
+                LOG.info("Couldn't find any usable (=unmasked) pixels."
+                          "Not inverting anything. ")
+                ### Must check what the innovations are used for further down
+                return x_forecast, P_forecast, P_forecast_inv, None
+
             # Now call the solver 
             x_analysis, P_analysis, P_analysis_inverse, \
                 innovations, fwd_modelled = self.solver_multiband(
