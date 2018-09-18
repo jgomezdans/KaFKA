@@ -153,6 +153,7 @@ def wrapper(the_chunk):
     
     roi = [ulx, uly, lrx, lry]
     if mask[this_Y:(this_Y+ny_valid), this_X:(this_X+nx_valid)].sum() > 0:   
+        print("Running ")
         run_kafka(roi, mask[this_Y:(this_Y+ny_valid), this_X:(this_X+nx_valid)],
                 hex(chunk), time_grid, bhr_data, parameter_list)
             
@@ -222,12 +223,12 @@ if __name__ == "__main__":
         mcd43a1_dir="/data/selene/ucfajlg/Ujia/MCD43"
     ####tilewidth = 75
     ###n_pixels = tilewidth*tilewidth
-#    mask = np.zeros((2400,2400),dtype=np.bool8)
+    mask = np.zeros((2400,2400),dtype=np.bool8)
 #    mask[900:940, 1300:1340] = True # Alcornocales
 #    mask[640:700, 1400:1500] = True # Campinha
-#    mask[650:730, 1180:1280] = True # Arros
+    mask[650:730, 1180:1280] = True # Arros
     #mask[ 2200:2395, 450:700 ] = True # Bondville, h11v04
-    mask = province_mask()
+    #mask = province_mask(provinces=["Córdoba"])
 
     bhr_data =  BHRObservations(emulator, tile, mcd43a1_dir, start_time,
                                 end_time=None, mcd43a2_dir=None)
@@ -239,20 +240,24 @@ if __name__ == "__main__":
         
     nx = ny = 2400
     them_chunks = [the_chunk for the_chunk in get_chunks(nx, ny, block_size= [256, 256])]
-    from dask.distributed import Client                                                                                          
-    #from distributed.deploy.ssh import SSHCluster
-    #with open('./hosts.txt', 'rb') as f:
-    #    hosts = f.read().split()
+    
+    try:
+        from dask.distributed import Client                                                                                          
+        #from distributed.deploy.ssh import SSHCluster
+        #with open('./hosts.txt', 'rb') as f:
+        #    hosts = f.read().split()
 
-    #c = SSHCluster(scheduler_addr=hosts[0], scheduler_port = 8786, worker_addrs=hosts[1:], nthreads=0, nprocs=1,
-    #               ssh_username=None, ssh_port=22, ssh_private_key=None, nohost=False, logdir='/tmp/')
-    client = Client('tcp://tyche.geog.ucl.ac.uk:8786')
-
+        #c = SSHCluster(scheduler_addr=hosts[0], scheduler_port = 8786, worker_addrs=hosts[1:], nthreads=0, nprocs=1,
+        #               ssh_username=None, ssh_port=22, ssh_private_key=None, nohost=False, logdir='/tmp/')
+        client = Client('tcp://tyche.geog.ucl.ac.uk:8786')
+        A = client.map (wrapper, them_chunks)
+        retval = client.gather(A)
+    except OSError:
+        retval = map(wrapper, them_chunks)
+        list(retval)
 
     #from dask.distributed import Client
     #client=Client(scheduler_file="/home/ucfajlg/scheduler.json")
-    A = client.map (wrapper, them_chunks)
-    retval = client.gather(A)
     #B = client.submit(A)
     #total = B.result()
     
