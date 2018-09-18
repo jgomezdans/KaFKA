@@ -38,6 +38,9 @@ M*D09GA
 MCD43A1/2 -> See BRDF_descriptors!
 
 """
+import logging
+LOG = logging.getLogger(__name__+".observations")
+
 import datetime
 import _pickle as cPickle
 import glob
@@ -388,6 +391,7 @@ class KafkaOutput(object):
             A = np.zeros(state_mask.shape, dtype=np.float32)
             A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::n_params])
             dst_ds.GetRasterBand(1).WriteArray(A)
+            LOG.info(f"Saved state to {fname:s}")
         
 
 if __name__ == "__main__":
