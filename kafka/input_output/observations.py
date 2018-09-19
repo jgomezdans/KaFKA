@@ -373,6 +373,12 @@ class KafkaOutput(object):
             A = np.zeros(state_mask.shape, dtype=np.float32)
             A[state_mask] = x_analysis[ii::n_params]
             dst_ds.GetRasterBand(1).WriteArray(A)
+            
+        LOG.info("Saving posterior inverse covariance matrix")
+        sp.save_npz(f"P_analysis_inv_{timestep.strftime("A%Y%j"):s}.npz",
+                    P_analysis_inv)
+        # Probably need to save state mask and other things to "unwrap"
+        # the matrix, such as parameters and so on
         for ii, param in enumerate(self.parameter_list):
             if self.prefix is None:
                 fname = os.path.join(self.folder, "%s_%s_unc.tif" %
