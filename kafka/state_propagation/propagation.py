@@ -10,7 +10,12 @@ import scipy.sparse.linalg as spl
 
 
 class IdentityPropagator(object):
+    """An identity observation operator propagator class."""
     def __init__(self, q_diag, n_params, mask):
+        """Takes a vector with the Q factors associated with the 
+        model uncertainty per parameter, and we assume we have
+        `n_params` and the boolean mask to figure out the number
+        of pixels."""
         self.n_params = n_params
         self.mask = mask
         self.n_elements = mask.sum()
@@ -33,6 +38,19 @@ class IdentityPropagator(object):
 def forward_state_propagation(x_analysis, P_analysis, P_analysis_inv,
                               M_matrix, Q_matrix, 
                               time_step, prior_obj):
+    """Forward state propagation. Spun out to its own function for 
+    testability. Takes the state vector (x_analysis), the associated
+    covariance (although this will always be `None` here ;D) and its
+    inverse (which gets used). It also takes the model matrix and its
+    associated covariance matrix, as well as the time step, and the 
+    prior object. The function propagates the state through the 
+    linear model given by `M_matrix`, inflates the uncertainty of
+    the propagation by using `Q_matrix`, and it then combines this
+    result with the Gaussian prior for the current time step.
+    
+    It returns the predicted state vector, and associated covariances."""
+    
+    ## TODO Needs to check sizes of matrices and vectors
     # The next few lines set up propagting the state
     # given a linear(ised) model M and the input
     # state and associated inverse covariance matrix
