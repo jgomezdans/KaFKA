@@ -375,29 +375,34 @@ class KafkaOutput(object):
             dst_ds.GetRasterBand(1).WriteArray(A)
             
         LOG.info("Saving posterior inverse covariance matrix")
-        sp.save_npz(f"P_analysis_inv_{timestep.strftime("A%Y%j"):s}.npz",
+        sp.save_npz(os.path.join(
+                    self.folder,
+                    f"P_analysis_inv_{timestep.strftime('A%Y%j'):s}.npz"),
                     P_analysis_inv)
         # Probably need to save state mask and other things to "unwrap"
         # the matrix, such as parameters and so on
-        for ii, param in enumerate(self.parameter_list):
-            if self.prefix is None:
-                fname = os.path.join(self.folder, "%s_%s_unc.tif" %
-                                    (param, timestep.strftime("A%Y%j")))
-            else:
-                fname = os.path.join(self.folder, "%s_%s_%s_unc.tif" %
-                                    (param, timestep.strftime("A%Y%j"),
-                                     self.prefix))
-            dst_ds = drv.Create(fname, state_mask.shape[1],
-                                state_mask.shape[0], 1,
-                                gdal.GDT_Float32, ['COMPRESS=DEFLATE',
-                                                   'BIGTIFF=YES',
-                                                   'PREDICTOR=1', 'TILED=YES'])
-            dst_ds.SetProjection(self.projection)
-            dst_ds.SetGeoTransform(self.geotransform)
-            A = np.zeros(state_mask.shape, dtype=np.float32)
-            A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::n_params])
-            dst_ds.GetRasterBand(1).WriteArray(A)
-            LOG.info(f"Saved state to {fname:s}")
+        bothered = False
+        LOG.info("Not saving uncertainties")
+        if bothered:
+            for ii, param in enumerate(self.parameter_list):
+                if self.prefix is None:
+                    fname = os.path.join(self.folder, "%s_%s_unc.tif" %
+                                        (param, timestep.strftime("A%Y%j")))
+                else:
+                    fname = os.path.join(self.folder, "%s_%s_%s_unc.tif" %
+                                        (param, timestep.strftime("A%Y%j"),
+                                        self.prefix))
+                dst_ds = drv.Create(fname, state_mask.shape[1],
+                                    state_mask.shape[0], 1,
+                                    gdal.GDT_Float32, ['COMPRESS=DEFLATE',
+                                                    'BIGTIFF=YES',
+                                                    'PREDICTOR=1', 'TILED=YES'])
+                dst_ds.SetProjection(self.projection)
+                dst_ds.SetGeoTransform(self.geotransform)
+                A = np.zeros(state_mask.shape, dtype=np.float32)
+                A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::n_params])
+                dst_ds.GetRasterBand(1).WriteArray(A)
+                LOG.info(f"Saved state to {fname:s}")
         
 
 if __name__ == "__main__":
