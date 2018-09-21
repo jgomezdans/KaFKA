@@ -16,15 +16,11 @@ class NoHessianMethod(Exception):
     def __init__(self, message):
         self.message = message
 
-def band_selecta(band):
-    if band == 0:
-        return np.array([0, 1, 6, 2])
-    else:
-        return np.array([3, 4, 6, 5])
 
+def hessian_correction_pixel(gp, x0, C_obs_inv, innovation, band, 
+                             nparams, band_mapper):
+    selecta = band_mapper[band]
 
-def hessian_correction_pixel(gp, x0, C_obs_inv, innovation, band, nparams):
-    selecta = band_selecta(band)
     ddH = gp.hessian(np.atleast_2d(x0[selecta]))
     big_ddH = np.zeros((nparams, nparams))
     for i, ii in enumerate(selecta):
@@ -35,7 +31,7 @@ def hessian_correction_pixel(gp, x0, C_obs_inv, innovation, band, nparams):
 
 
 def hessian_correction(gp, x0, R_mat, innovation, mask, state_mask, band,
-                       nparams):
+                       nparams, band_mapper):
     """Calculates higher order Hessian correction for the likelihood term.
     Needs the GP, the Observational uncertainty, the mask...."""
     if not hasattr(gp, "hessian"):
@@ -54,20 +50,23 @@ def hessian_correction(gp, x0, R_mat, innovation, mask, state_mask, band,
             x0_pixel = x0.squeeze()[(nparams*i):(nparams*(i + 1))]
             # Calculate the Hessian correction for this pixel
             hessian_corr = m * hessian_correction_pixel(gp, x0_pixel, C,
-                                                        innov, band, nparams)
+                                                        innov, band, nparams,
+                                                        band_mapper)
         little_hess.append(hessian_corr)
     hessian_corr = block_diag(little_hess)
     return hessian_corr
 
 
-def hessian_correction_multiband(gp, x0, R_mats, innovations, masks, state_mask, n_bands,
-                       nparams):
+def hessian_correction_multiband(gp, x0, R_mats, innovations, masks, state_mask, 
+                                 n_bands, nparams, band_mapper):
     """ Non linear correction for the Hessian of the cost function. This handles
     multiple bands. """
     little_hess_cor = []
-    for R, innovation, mask, band in zip(R_mats, innovations, masks, range(n_bands)):
-        little_hess_cor.append(hessian_correction(gp, x0, R, innovation, mask, state_mask, band,
-                       nparams))
+    for R, innovation, mask, band in zip(R_mats, innovations, masks, 
+                                         range(n_bands)):
+        little_hess_cor.append(hessian_correction(gp, x0, R, innovation, 
+                                                  mask, state_mask, band,
+                                                  nparams, band_mapper))
     hessian_corr = sum(little_hess_cor) #block_diag(little_hess_cor)
     return hessian_corr
 
