@@ -234,6 +234,7 @@ class LinearKalman (object):
         n_iter = 1
         n_bands = len(current_data)
         
+        previous_convergence = 1e9
         while not_converged:
             Y = []
             MASK = []
@@ -291,13 +292,23 @@ class LinearKalman (object):
             if (convergence_norm < convergence_tolerance) and (
                     n_iter >= min_iterations):
                 # Converged!
+                LOG.info("Converged sensibly")
                 not_converged = False
+            elif previous_convergence < convergence_norm:
+                # Too many iterations
+                LOG.info("Diverging solution. Bailing out here")
+                # Return previous solution
+                LOG.info("--> Returning previous solution! :-0")
+                x_analysis = x_prev*1.
+                not_converged = False
+                
             elif n_iter > 25:
                 # Too many iterations
                 LOG.warning("Bailing out after 25 iterations!!!!!!")
                 not_converged = False
 
             x_prev = x_analysis*1.
+            previous_convergence = convergence_norm
             n_iter += 1
             
         # Once we have converged...
