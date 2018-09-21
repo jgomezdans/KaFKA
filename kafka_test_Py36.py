@@ -23,9 +23,8 @@ import kafka
 from kafka.input_output import BHRObservations, KafkaOutput, get_chunks
 from kafka import LinearKalman
 from kafka.inference import block_diag
-from kafka.inference import propagate_information_filter_LAI
-from kafka.inference import no_propagation
 from kafka.inference import create_nonlinear_observation_operator
+from kafka.state_propagation import IdentityPropagator, NoPropagator
 
 
 # Probably should be imported from somewhere else, but I can't see
@@ -33,6 +32,7 @@ from kafka.inference import create_nonlinear_observation_operator
 
 
 
+        
 
 ###class DummyInferencePrior(_WrappingInferencePrior):
     ###"""
@@ -75,7 +75,7 @@ class JRCPrior(object):
         -------
         The mean prior vector, covariance and inverse covariance matrices."""
         # broadly TLAI 0->7 for 1sigma
-        sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.5])
+        sigma = np.array([0.12, 0.7, 0.0959, 0.15, 1.5, 0.2, 0.6])
         x0 = np.array([0.17, 1.0, 0.1, 0.7, 2.0, 0.18, np.exp(-0.5*2.)])
         # The individual covariance matrix
         little_p = np.diag(sigma**2).astype(np.float32)
@@ -168,24 +168,28 @@ def run_kafka(roi, mask, prefix, time_grid, bhr_data,
 
     if the_prior is None:
         the_prior = JRCPrior(parameter_list, mask)
+
+    #Q = np.array([100., 100., 100., 100., 100., 100., 20.])
+    Q = np.array([100., 1e5, 1e2, 100., 1e5, 1e2, 100.])
+    
+    band_mapper = [np.array([0, 1, 6, 2]),
+                   np.array([3, 4, 6, 5])]
+    
+    state_propagator = IdentityPropagator(Q, 7, mask)
+    #state_propagator = NoPropagator(Q, 7, mask)
     
     kf = LinearKalman(bhr_data, output, mask, 
                       create_nonlinear_observation_operator, parameter_list,
-                      state_propagation=None,
-                      prior=the_prior,
+                      state_propagation=state_propagator.get_matrices,
+                      prior=the_prior, band_mapper=band_mapper,
                       linear=False)
 
     # Get starting state... We can request the prior object for this
     x_forecast, P_forecast_inv = the_prior.process_prior(None)
+        
     
-    Q = np.zeros_like(x_forecast)
-    Q[6::7] = 0.025
-    
-    kf.set_trajectory_model()
-    kf.set_trajectory_uncertainty(Q)
-    
-    
-    kf.run(time_grid, x_forecast, None, P_forecast_inv, iter_obs_op=True)
+    kf.run(time_grid, x_forecast, None, P_forecast_inv,
+           iter_obs_op=True, is_robust=False)
     
 
 def province_mask(raster='HDF4_EOS:EOS_GRID:"/data/selene//ucfajlg/Ujia/MCD43/' + 
@@ -232,8 +236,8 @@ if __name__ == "__main__":
 
     bhr_data =  BHRObservations(emulator, tile, mcd43a1_dir, start_time,
                                 end_time=None, mcd43a2_dir=None)
-    base = datetime(2017,1,1)
-    num_days = 360
+    base = datetime(2017,5,1)
+    num_days = 180
     time_grid = []
     for x in range( 0, num_days, 16):
         time_grid.append( base + timedelta(days = x) )

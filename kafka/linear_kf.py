@@ -37,10 +37,13 @@ from .inference import locate_in_lut, run_emulator, create_uncertainty
 from .inference import create_linear_observation_operator
 from .inference import create_nonlinear_observation_operator
 from .inference import iterate_time_grid
-from .inference import propagate_information_filter_LAI # eg
 from .inference import hessian_correction
 from .inference import hessian_correction_multiband
-from .inference.kf_tools import propagate_and_blend_prior
+from .inference import robust_inflation
+
+from .state_propagation import forward_state_propagation
+
+
 
 # Set up logging
 
@@ -64,7 +67,6 @@ class LinearKalman (object):
     rather grotty "0-th" order models!"""
     def __init__(self, observations, output, state_mask,
                  create_observation_operator, parameters_list,
-                 state_propagation=propagate_information_filter_LAI,
                  state_propagation,
                  band_mapper=None,
                  linear=True, diagnostics=True, prior=None):
@@ -86,7 +88,7 @@ class LinearKalman (object):
         self.state_mask = state_mask
         self.n_state_elems = self.state_mask.sum()
         self._state_propagator = state_propagation
-        self._advance = propagate_and_blend_prior
+        self._advance = forward_state_propagation
         self.prior = prior
         # The band mapper allows some parameters to be defined per band,
         # such as optical properties per band and so on. The format for
@@ -103,15 +105,18 @@ class LinearKalman (object):
         self._create_observation_operator = create_observation_operator
         LOG.info("Starting KaFKA run!!!")
 
-    def advance(self, x_analysis, P_analysis, P_analysis_inverse,
-                trajectory_model, trajectory_uncertainty):
+    def advance(self, x_analysis, P_analysis, P_analysis_inverse):
+        LOG.info("Polling propagation model")
+        trajectory_model, trajectory_uncertainty = self._state_propagator(
+            x_analysis, P_analysis, P_analysis_inverse,
+            self.current_timestep)
+        
         LOG.info("Calling state propagator...")
+        
         x_forecast, P_forecast, P_forecast_inverse = \
             self._advance(x_analysis, P_analysis, P_analysis_inverse,
                           trajectory_model, trajectory_uncertainty,
-                          prior=self.prior, date=self.current_timestep,
-                          state_propagator=self._state_propagator)
-
+                          self.current_timestep, self.prior)
         return x_forecast, P_forecast, P_forecast_inverse
 
     def _set_plot_view(self, diag_string, timestep, obs):
@@ -126,7 +131,6 @@ class LinearKalman (object):
     def _plotter_iteration_end(self, plot_obj, x, P, innovation, mask):
         """We call this diagnostic method at the **END** of the iteration"""
         pass
-
 
     def _get_observations_timestep(self, timestep, band=None):
         """A method that returns the observations, mask and uncertainty for a
@@ -169,8 +173,7 @@ class LinearKalman (object):
             if not is_first:
                 LOG.info("Advancing state, %s" % timestep.strftime("%Y-%m-%d"))
                 x_forecast, P_forecast, P_forecast_inverse = self.advance(
-                    x_analysis, P_analysis, P_analysis_inverse,
-                    self.trajectory_model, self.trajectory_uncertainty)
+                    x_analysis, P_analysis, P_analysis_inverse)
 
             is_first = False
             if len(locate_times) == 0:
@@ -211,7 +214,7 @@ class LinearKalman (object):
 
             x_analysis, P_analysis, P_analysis_inverse, innovations = \
                 self.do_all_bands(step, current_data, x_forecast, P_forecast,
-                                  P_forecast_inverse)
+                                  P_forecast_inverse, is_robust=is_robust)
             x_forecast = x_analysis*1.
             try:
                 P_forecast = P_analysis*1.
@@ -227,13 +230,12 @@ class LinearKalman (object):
 
     def do_all_bands(self, timestep, current_data, x_forecast, P_forecast,
                         P_forecast_inverse, convergence_tolerance=1e-3,
-                        min_iterations=2):
+                        min_iterations=5, is_robust=False):
         not_converged = True
         # Linearisation point is set to x_forecast for first iteration
         x_prev = x_forecast*1.
         n_iter = 1
         n_bands = len(current_data)
-        
         previous_convergence = 1e9
         while not_converged:
             Y = []
@@ -276,11 +278,13 @@ class LinearKalman (object):
                     P_forecast, P_forecast_inverse, UNC,
                     META)
             
+            
             if n_iter > 1 and is_robust:
                 
                 # Mask out weird forecasts 
                 MASK = robust_inflation(n_bands, innovations, Y, UNC,
                         self.state_mask, tolerance=6.)
+            
 
             # Test convergence. We calculate the l2 norm of the difference
             # between the state at the previous iteration and the current one
@@ -319,14 +323,17 @@ class LinearKalman (object):
         # Once we have converged...
         # Correct hessian for higher order terms
         #split_points = [m.sum( ) for m in MASK]
-        INNOVATIONS = np.split(innovations, n_bands)
-        # SWitched off for time being
-        #P_correction = hessian_correction_multiband(data.emulator, x_analysis,
-        #                                            UNC, INNOVATIONS, MASK,
-        #                                            self.state_mask, n_bands,
-        #                                            self.n_params, self.band_mapper)
         
-        #P_analysis_inverse = P_analysis_inverse - P_correction
+        
+        
+        # SWitched off for time being
+        INNOVATIONS = np.split(innovations, n_bands)
+        P_correction = hessian_correction_multiband(data.emulator, x_analysis,
+                                                    UNC, INNOVATIONS, MASK,
+                                                    self.state_mask, n_bands,
+                                                    self.n_params, self.band_mapper)
+        
+        P_analysis_inverse = P_analysis_inverse - P_correction
 
         # Done with this observation, move along...
         
