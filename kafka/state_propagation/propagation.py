@@ -8,7 +8,6 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as spl
 
-
 class NoPropagator(object):
     """A NO PROPAGATION operator propagator class."""
     def __init__(self, q_diag, n_params, mask):
