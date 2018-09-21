@@ -65,6 +65,7 @@ class LinearKalman (object):
     def __init__(self, observations, output, state_mask,
                  create_observation_operator, parameters_list,
                  state_propagation=propagate_information_filter_LAI,
+                 state_propagation,
                  band_mapper=None,
                  linear=True, diagnostics=True, prior=None):
         """The class creator takes (i) an observations object, (ii) an output
@@ -126,30 +127,6 @@ class LinearKalman (object):
         """We call this diagnostic method at the **END** of the iteration"""
         pass
 
-    def set_trajectory_model(self):
-        """In a Kalman filter, the state is progated from time `t` to `t+1`
-        using a model. We assume that this model is a matrix, and for the time
-        being, the matrix is the identity matrix. That's how we roll!"""
-        n = self.n_state_elems
-        self.trajectory_model = sp.eye(self.n_params*n, self.n_params*n,
-                                       format="csr")
-
-    def set_trajectory_uncertainty(self, Q):
-        """In a Kalman filter, the model that propagates the state from time
-        `t` to `t+1` is assumed to be *wrong*, and this is indicated by having
-        additive Gaussian noise, which we assume is zero-mean, and controlled
-        by a covariance matrix `Q`. Here, you can provide the main diagonal of
-         `Q`.
-
-        Parameters
-        -----------
-        Q: array
-            The main diagonal of the model uncertainty covariance matrix.
-        """
-        n = self.n_state_elems
-        self.trajectory_uncertainty = sp.eye(self.n_params*n, self.n_params*n,
-                                             format="csr")
-        self.trajectory_uncertainty.setdiag(Q)
 
     def _get_observations_timestep(self, timestep, band=None):
         """A method that returns the observations, mask and uncertainty for a

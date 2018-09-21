@@ -9,6 +9,28 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spl
 
 
+class NoPropagator(object):
+    """A NO PROPAGATION operator propagator class."""
+    def __init__(self, q_diag, n_params, mask):
+        """Takes a vector with the Q factors associated with the 
+        model uncertainty per parameter, and we assume we have
+        `n_params` and the boolean mask to figure out the number
+        of pixels."""
+        self.n_params = n_params
+        self.mask = mask
+        self.n_elements = mask.sum()
+        assert q_diag.shape[0] == self.n_params
+        self.q_diag = q_diag
+        
+    def get_matrices(self, x, P, P_inv, timestep):
+        M_matrix = sp.csr_matrix((self.n_params*self.n_elements,
+                          self.n_params*self.n_elements))
+        
+        Q_matrix = sp.csr_matrix((self.n_params*self.n_elements,
+                          self.n_params*self.n_elements))
+        return M_matrix, Q_matrix
+    
+    
 class IdentityPropagator(object):
     """An identity observation operator propagator class."""
     def __init__(self, q_diag, n_params, mask):
@@ -56,7 +78,7 @@ def forward_state_propagation(x_analysis, P_analysis, P_analysis_inv,
     # state and associated inverse covariance matrix
     A_inv = M_matrix @ P_analysis_inv @ M_matrix.T
     # Set up the approximate inflation matrix
-    C_matrix_diagonal = 1./(1 + A_inv.diagonal()*Q.diagonal())
+    C_matrix_diagonal = 1./(1 + A_inv.diagonal()*Q_matrix.diagonal())
     C_matrix = sp.eye(*P_analysis_inv.shape)
     C_matrix.setdiag(C_matrix_diagonal)
     # Do propagate the state now
@@ -67,9 +89,10 @@ def forward_state_propagation(x_analysis, P_analysis, P_analysis_inv,
     mu_prior, c_prior_inv = prior_obj.process_prior(time_step)
     B = c_prior_inv + P_forecast_inv
     y = c_prior_inv @ mu_prior + P_forecast_inv @ x_forecast
-    BI = sp.linalg.splu(B)
+    BI = spl.splu(B)
     x_merged = BI.solve(y)
-    return x_merged, B
+    
+    return x_merged, None, B
 
 
 
