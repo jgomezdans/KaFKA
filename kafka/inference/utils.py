@@ -340,7 +340,38 @@ def spsolve2(a, b):
     a_lu = spl.splu(a.tocsc())   # LU decomposition for sparse a
     out = sp.lil_matrix((a.shape[1], b.shape[1]), dtype=np.float32)
     b_csc = b.tocsc()
-    for j in xrange(b.shape[1]):
+    for j in range(b.shape[1]):
         bb = np.array(b_csc[j, :].todense()).squeeze()
         out[j, j] = a_lu.solve(bb)[j]
     return out.tocsr()
+
+def robust_inflation(n_bands, innovations, observations, uncertainty,
+                        state_mask, tolerance=6.1):
+        innovations = np.split(innovations, n_bands)
+        nn, mm = uncertainty[0].shape
+        M = np.zeros((n_bands,*observations[0].shape))
+        unc = np.zeros((n_bands, *observations[0].shape))
+        for i in range(n_bands):
+            M[i, state_mask] = innovations[i]
+            unc[i, state_mask] = np.sqrt(1./uncertainty[i].diagonal()[
+                state_mask.flatten()])
+        passer = unc == 0
+        unc[passer] = np.nan
+        z_score = M*0.
+        z_score[~passer] = M[~passer]/unc[~passer]
+        outliers = z_score > tolerance
+        outliers *= state_mask    
+        new_mask = []             
+
+        for i in range(n_bands):
+            LOG.info(f"Searching outliers band{i:d}. Found " +
+                f"{(outliers[i]).sum():d}")
+            #the_fxxing_mx = sp.lil_matrix((nn, mm))
+            #diag = uncertainty[i].diagonal()
+            #diag[(outliers[i, :, :]).ravel()] /= (100.)**2
+            #the_fxxing_mx.setdiag(diag)
+            #new_unc.append(the_fxxing_mx)
+            new_mask.append(outliers[i])
+            
+        
+        return new_mask
