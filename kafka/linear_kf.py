@@ -276,6 +276,11 @@ class LinearKalman (object):
                     P_forecast, P_forecast_inverse, UNC,
                     META)
             
+            if n_iter > 1 and is_robust:
+                
+                # Mask out weird forecasts 
+                MASK = robust_inflation(n_bands, innovations, Y, UNC,
+                        self.state_mask, tolerance=6.)
 
             # Test convergence. We calculate the l2 norm of the difference
             # between the state at the previous iteration and the current one
