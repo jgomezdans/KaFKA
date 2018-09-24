@@ -22,6 +22,7 @@ class NoPropagator(object):
         self.q_diag = q_diag
         
     def get_matrices(self, x, P, P_inv, timestep):
+        assert len(x) == self.n_params*self.n_elements
         M_matrix = sp.csr_matrix((self.n_params*self.n_elements,
                           self.n_params*self.n_elements))
         
