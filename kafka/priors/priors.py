@@ -3,6 +3,7 @@ import numpy as np
 
 from osgeo import gdal
 
+from kafka import block_diag
 
 class JRCPrior(object):
     """Dummpy 2.7/3.6 prior class following the same interface as 3.6 only
