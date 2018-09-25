@@ -17,7 +17,7 @@ from kafka.inference import create_nonlinear_observation_operator
 from kafka.state_propagation import IdentityPropagator, NoPropagator
 from kafka.priors import JRCPrior
 
-from InferenceInterface import kafka_inference
+from kafka.InferenceInterface import kafka_inference
 
 import gdal
 
