@@ -97,7 +97,8 @@ def chunk_wrapper(the_chunk, config):
 
 def kafka_inference(mask, time_grid, parameter_list,
                     observations, prior, propagator,
-                    output_folder, band_mapper, dask_client):
+                    output_folder, band_mapper, dask_client,
+                    chunk_size=[64, 64]):
     
     # First, put the configuration in its own object to minimise
     # variable transport
@@ -109,7 +110,7 @@ def kafka_inference(mask, time_grid, parameter_list,
                     prior, propagator, output_folder, band_mapper)
     nx, ny = mask.shape
     them_chunks = [the_chunk for the_chunk in get_chunks(nx, ny,
-                    block_size= [256, 256])]
+                    block_size= chunk_size)]
     
     wrapper = partial(chunk_wrapper, config=config)
 
