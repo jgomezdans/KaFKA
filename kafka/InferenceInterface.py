@@ -16,6 +16,7 @@ def stitch_outputs(output_folder, parameter_list):
     p = Path(output_folder)
     # Loop over parameters and find all the files for all the 
     # chunks and dates
+    output_tiffs = {}
     for parameter in parameter_list:
         files = [fich for fich in p.glob(f"{parameter:s}*.tif")]
         dates = [fich.stem.split(parameter)[1].split("_")[1] 
@@ -36,6 +37,8 @@ def stitch_outputs(output_folder, parameter_list):
                                 options=gdal.TranslateOptions(format="GTiff",
                                                              creationOptions=["TILED=YES",
                                                                             "COMPRESS=DEFLATE"]))
+        output_tiffs[parameter] = dst_ds.GetDescription()
+    return output_tiffs
         
 
 def chunk_inference(roi, prefix, current_mask, configuration):
@@ -116,7 +119,7 @@ def kafka_inference(mask, time_grid, parameter_list,
         A = dask_client.map (wrapper, them_chunks)
         retval = dask_client.gather(A)
     
-    stitch_outputs(output_folder, parameter_list)
+    return stitch_outputs(output_folder, parameter_list)
 
     
 
