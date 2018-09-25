@@ -23,21 +23,25 @@ def stitch_outputs(output_folder, parameter_list):
                  for fich in files]
         fnames = []
         # Now for each data, stitch up all the chunks for that parameter
-        for date in dates:
+        for date in set(dates):
             sel_files = [fich.as_posix() 
                          for fich in files if fich.stem.find(date) >= 0 ]
             dst_ds = gdal.BuildVRT((p/f"{parameter:s}_{date:s}.vrt").as_posix(),
                                 sel_files)
             fnames.append(dst_ds.GetDescription())
+            dst_ds = None
+        
         # Potentially, create a multiband VRT/GTiff with all the dates?
         dst_ds = gdal.BuildVRT((p/f"{parameter:s}.vrt").as_posix(),
                                fnames,options=gdal.BuildVRTOptions(separate=True))
+        dst_ds = None
         dst_ds = gdal.Translate((p/f"{parameter:s}.tif").as_posix(),
                                 (p/f"{parameter:s}.vrt").as_posix(),
                                 options=gdal.TranslateOptions(format="GTiff",
                                                              creationOptions=["TILED=YES",
                                                                             "COMPRESS=DEFLATE"]))
         output_tiffs[parameter] = dst_ds.GetDescription()
+        dst_ds = None
     return output_tiffs
         
 
@@ -97,7 +101,8 @@ def chunk_wrapper(the_chunk, config):
 
 def kafka_inference(mask, time_grid, parameter_list,
                     observations, prior, propagator,
-                    output_folder, band_mapper, dask_client):
+                    output_folder, band_mapper, dask_client,
+                    chunk_size=[64, 64]):
     
     # First, put the configuration in its own object to minimise
     # variable transport
@@ -109,7 +114,7 @@ def kafka_inference(mask, time_grid, parameter_list,
                     prior, propagator, output_folder, band_mapper)
     nx, ny = mask.shape
     them_chunks = [the_chunk for the_chunk in get_chunks(nx, ny,
-                    block_size= [256, 256])]
+                    block_size= chunk_size)]
     
     wrapper = partial(chunk_wrapper, config=config)
 
