@@ -29,15 +29,19 @@ def stitch_outputs(output_folder, parameter_list):
             dst_ds = gdal.BuildVRT((p/f"{parameter:s}_{date:s}.vrt").as_posix(),
                                 sel_files)
             fnames.append(dst_ds.GetDescription())
+            dst_ds = None
+        
         # Potentially, create a multiband VRT/GTiff with all the dates?
         dst_ds = gdal.BuildVRT((p/f"{parameter:s}.vrt").as_posix(),
                                fnames,options=gdal.BuildVRTOptions(separate=True))
+        dst_ds = None
         dst_ds = gdal.Translate((p/f"{parameter:s}.tif").as_posix(),
                                 (p/f"{parameter:s}.vrt").as_posix(),
                                 options=gdal.TranslateOptions(format="GTiff",
                                                              creationOptions=["TILED=YES",
                                                                             "COMPRESS=DEFLATE"]))
         output_tiffs[parameter] = dst_ds.GetDescription()
+        dst_ds = None
     return output_tiffs
         
 
