@@ -23,7 +23,7 @@ def stitch_outputs(output_folder, parameter_list):
                  for fich in files]
         fnames = []
         # Now for each data, stitch up all the chunks for that parameter
-        for date in dates:
+        for date in set(dates):
             sel_files = [fich.as_posix() 
                          for fich in files if fich.stem.find(date) >= 0 ]
             dst_ds = gdal.BuildVRT((p/f"{parameter:s}_{date:s}.vrt").as_posix(),
