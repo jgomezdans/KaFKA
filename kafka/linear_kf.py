@@ -324,8 +324,6 @@ class LinearKalman (object):
         # Correct hessian for higher order terms
         #split_points = [m.sum( ) for m in MASK]
         
-        
-        
         # SWitched off for time being
         INNOVATIONS = np.split(innovations, n_bands)
         P_correction = hessian_correction_multiband(data.emulator, x_analysis,

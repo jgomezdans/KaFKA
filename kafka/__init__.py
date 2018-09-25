@@ -4,3 +4,4 @@ from .linear_kf import LinearKalman
 from .observation_operators import *
 from .state_propagation import *
 from .priors import *
+from .InferenceInterface import kafka_inference
