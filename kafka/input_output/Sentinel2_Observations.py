@@ -170,11 +170,19 @@ class Sentinel2Observations(object):
         # Read and reproject S2 surface reflectance
         the_band = self.band_map[band]
         original_s2_file = current_folder/f"B{the_band:s}_sur.tif"
-        print(original_s2_file)
+        LOG.info(f"Original file {str(original_s2_file):s}")
         g = reproject_image(str(original_s2_file),
                             self.state_mask)
+        
         rho_surface = g.ReadAsArray()
+        cloud_mask = current_folder/f"cloud.tif"
+        g = reproject_image(str(cloud_mask),
+                            self.state_mask)
+        cloud_mask = g.ReadAsArray()
         mask = rho_surface > 0
+        mask = mask*(cloud_mask <= 20)
+        LOG.info(f"Total of {mask.sum():d} clear pixels " + 
+                 f"({100.*mask.sum()/np.prod(mask.shape):f}%)")
         rho_surface = np.where(mask, rho_surface/10000., 0)
         # Read and reproject S2 angles
         emulator_band_map = [2, 3, 4, 5, 6, 7, 8, 9, 12, 13]
@@ -199,5 +207,5 @@ if __name__ == "__main__":
     obs = Sentinel2Observations("/home/ucfafyi/public_html/S2_data/32/U/PU/",
            "/home/ucfafyi/DATA/Multiply/emus/sail/",
            "./ESU.tif")
-    timestep = datetime.datetime(2017,5,27)
-    retval = obs.get_band_data(timestep, 0)
+    for timestep in obs.dates:
+        retval = obs.get_band_data(timestep, 0)
