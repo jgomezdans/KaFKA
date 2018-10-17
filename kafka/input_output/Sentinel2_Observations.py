@@ -11,7 +11,14 @@ import gdal
 import osr
 
 import xml.etree.ElementTree as ET
+
 from collections import namedtuple
+
+from pathlib import Path
+
+import logging
+LOG = logging.getLogger(__name__+".Sentinel2_Observations")
+
 
 def parse_xml(filename):
     """Parses the XML metadata file to extract view/incidence 
@@ -77,8 +84,16 @@ S2MSIdata = namedtuple('S2MSIdata',
 
 class Sentinel2Observations(object):
     def __init__(self, parent_folder, emulator_folder, state_mask, chunk=None):
-        if not os.path.exists(parent_folder):
+        parent_folder = Path(parent_folder)
+        emulator_folder = Path(emulator_folder)
+        if not parent_folder.exists():
+            LOG.info(f"S2 data folder: {parent_folder}")
             raise IOError("S2 data folder doesn't exist")
+
+        if not emulator_folder.exists():
+            LOG.info(f"Emulator folder: {emulator_folder}")
+            raise IOError("Emulator folder doesn't exist")
+        
         self.parent = parent_folder
         self.emulator_folder = emulator_folder
         self.state_mask = state_mask
@@ -109,21 +124,22 @@ class Sentinel2Observations(object):
     def _find_granules(self, parent_folder):
         """Finds granules. Currently does so by checking for
         Feng's AOT file."""
-        self.dates = []
-        self.date_data = {}
-        for root, dirs, files in os.walk(parent_folder):
-            for fich in files:
-                if fich.find("aot.tif") >= 0:
-                    this_date = datetime.datetime(*[int(i) 
-                                for i in root.split("/")[-4:-1]])
-                    self.dates.append(this_date)
-                    self.date_data[this_date] = root
+        
+        test_files = [f for f in parent_folder.rglob("*/aot.tif")]
+        self.dates = [ datetime.datetime(*(list(map(int, f.parts[-5:-2]))))
+                 for f in test_files]
+        self.date_data = dict(zip(self.dates, [f.parent for f in test_files]))
         self.bands_per_observation = {}
+        LOG.info(f"Found {len(test_files):d} S2 granules")
+        LOG.info(f"First granule: {sorted(self.dates)[0].strftime('%Y-%m-%d'):s}")
+        LOG.info(f"Last granule: {sorted(self.dates)[-1].strftime('%Y-%m-%d'):s}")
+                              
         for the_date in self.dates:
             self.bands_per_observation[the_date] = 10 # 10 bands
 
 
     def _find_emulator(self, sza, saa, vza, vaa):
+        LOG.info("Emulator library code needs updating....")
         raa = vaa - saa
         vzas = np.array([float(s.split("_")[-3]) 
                          for s in self.emulator_files])
@@ -148,15 +164,15 @@ class Sentinel2Observations(object):
                             [sza, saa, vza, vaa]))
         # This should be really using EmulatorEngine...
         emulator_file = self._find_emulator(sza, saa, vza, vaa)
-        emulator = cPickle.load( open (emulator_file, 'rb'),
+        emulator = cPickle.load(open(emulator_file, 'rb'),
                                  encoding='latin1' )
 
         # Read and reproject S2 surface reflectance
         the_band = self.band_map[band]
-        original_s2_file = os.path.join ( current_folder, 
-                                         "B{}_sur.tif".format(the_band))
+        original_s2_file = current_folder/f"B{the_band:s}_sur.tif"
         print(original_s2_file)
-        g = reproject_image( original_s2_file, self.state_mask)
+        g = reproject_image(str(original_s2_file),
+                            self.state_mask)
         rho_surface = g.ReadAsArray()
         mask = rho_surface > 0
         rho_surface = np.where(mask, rho_surface/10000., 0)
@@ -177,3 +193,11 @@ class Sentinel2Observations(object):
 
         return s2data
 
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    obs = Sentinel2Observations("/home/ucfafyi/public_html/S2_data/32/U/PU/",
+           "/home/ucfafyi/DATA/Multiply/emus/sail/",
+           "./ESU.tif")
+    timestep = datetime.datetime(2017,5,27)
+    retval = obs.get_band_data(timestep, 0)
