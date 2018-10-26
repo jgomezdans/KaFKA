@@ -125,7 +125,8 @@ def create_linear_observation_operator(obs_op, n_params, metadata,
 
 
 def create_nonlinear_observation_operator(n_params, emulator, metadata,
-                                          mask, state_mask,  x_forecast, band):
+                                          mask, state_mask,  x_forecast, band,
+                                          band_mapper=None):
     """Using an emulator of the nonlinear model around `x_forecast`.
     This case is quite special, as I'm focusing on a BHR SAIL
     version (or the JRC TIP), which have spectral parameters
@@ -141,19 +142,17 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     H0 = np.zeros(n_times, dtype=np.float32)
 
 
-    # So the model has spectral components.
-    if band == 0:
-        # ssa, asym, TLAI, rsoil
-        state_mapper = np.array([0, 1, 6, 2])
-    elif band == 1:
-        # ssa, asym, TLAI, rsoil
-        state_mapper = np.array([3, 4, 6, 5])
+    if band_mapper is not None:
+        state_mapper = band_mapper[band]
+    else:
+        state_mapper = np.arange(n_params, dtype=np.int16)
+
 
     # This loop can be JIT'ed
-    x0 = np.zeros((n_times, 4))
+    x0 = np.zeros((n_times, n_params))
     for i, m in enumerate(mask[state_mask].flatten()):
         if m:
-            x0[i, :] = x_forecast[(n_params * i) + state_mapper]
+            x0[i, :] = x_forecast[(n_params*i) + state_mapper]
     LOG.info("Running emulators")
     # Calls the run_emulator method that only does different vectors
     # It might be here that we do some sort of clustering

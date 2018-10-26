@@ -251,13 +251,16 @@ class LinearKalman (object):
                 # Note that we could well do with passing `self.band_mapper`
                 n_good_obs = np.sum(data.mask * self.state_mask)
                 if n_good_obs > 0:
+                    # Calculate H matrix & H0 vector around the linearisation
+                    # point given by x_prev
                     H_matrix_= self._create_observation_operator(self.n_params,
                                                             data.emulator,
                                                             data.metadata,
                                                             data.mask,
                                                             self.state_mask,
                                                             x_prev,
-                                                            band)
+                                                            band,
+                                                            band_mapper = self.band_mapper)
                     H_matrix.append(H_matrix_)
                     Y.append(data.observations)
                     MASK.append(data.mask)
@@ -269,8 +272,8 @@ class LinearKalman (object):
                 LOG.info("Couldn't find any usable (=unmasked) pixels."
                           "Not inverting anything. ")
                 ### Must check what the innovations are used for further down
-                return x_forecast, P_forecast, P_forecast_inv, None
-
+                return x_forecast, P_forecast, P_forecast_inverse, None
+            
             # Now call the solver 
             x_analysis, P_analysis, P_analysis_inverse, \
                 innovations, fwd_modelled = self.solver_multiband(
@@ -296,8 +299,8 @@ class LinearKalman (object):
             #                                  x_prev[maska])/float(maska.sum())
             convergence_norm = np.linalg.norm(x_analysis - x_prev)/float(len(x_analysis))
             LOG.info(
-                "Band {:d}, Iteration # {:d}, convergence norm: {:g}".format(
-                    band, n_iter, convergence_norm))
+                "Iteration # {:d}, convergence norm: {:g}".format(
+                    n_iter, convergence_norm))
             if (convergence_norm < convergence_tolerance) and (
                     n_iter >= min_iterations):
                 # Converged!
@@ -316,23 +319,59 @@ class LinearKalman (object):
                 LOG.warning("Bailing out after 25 iterations!!!!!!")
                 not_converged = False
 
+            # Update the linearisation point to the solution
+            # after the current iteration...
             x_prev = x_analysis*1.
             previous_convergence = convergence_norm
             n_iter += 1
             
+            INNOVATIONS = np.split(innovations, n_bands)
+            # Need to plot the goodness of fit somewhere...
+            #import matplotlib.pyplot as plt
+            #M = []
+            #print(f"Iteration: {n_iter-1:d}")
+            #for band in range(n_bands):
+                #t = np.zeros_like(self.state_mask).astype(np.float)            
+                #t[self.state_mask*MASK[band]] = INNOVATIONS[band]
+                #M.append(t)
+                #print(f"\tBand: {band:d}, {np.mean(INNOVATIONS[band]):f}")
+            print(f"Timestep {timestep.isoformat():s}")
+            print(f"\tavg TLAI: {x_analysis[6::10].mean():f}")
+            print(f"\tavg TCAB: {x_analysis[1::10].mean():f}")
+            print(f"\tavg N: {x_analysis[0::10].mean():f}")
+            #plt.figure()
+            #t = np.zeros_like(self.state_mask).astype(np.float)
+            #t[self.state_mask] = -2*np.log(x_analysis[6::10])
+            #plt.imshow(t, interpolation="nearest", vmin=0,
+            #           vmax=5, cmap=plt.cm.inferno)
+            #plt.title(f"Iteration:  {n_iter-1:d}")
+            
+            
+
+        
         # Once we have converged...
         # Correct hessian for higher order terms
         #split_points = [m.sum( ) for m in MASK]
         
-        # SWitched off for time being
-        INNOVATIONS = np.split(innovations, n_bands)
-        P_correction = hessian_correction_multiband(data.emulator, x_analysis,
-                                                    UNC, INNOVATIONS, MASK,
-                                                    self.state_mask, n_bands,
-                                                    self.n_params, self.band_mapper)
-        
-        P_analysis_inverse = P_analysis_inverse - P_correction
+        ###try:
+            #### SWitched off for time being
+            ###INNOVATIONS = np.split(innovations, n_bands)
+            #### Need to plot the goodness of fit somewhere...
+            ###M = []
+            ###for band in range(n_bands):
+                ###t = np.zeros_like(self.state_mask).astype(np.float)
+            
+                ###t[self.state_mask*MASK[band]] = INNOVATIONS[band]
+                ###M.append(t)
 
+            ###P_correction = hessian_correction_multiband(data.emulator, x_analysis,
+                                                    ###UNC, INNOVATIONS, MASK,
+                                                    ###self.state_mask, n_bands,
+                                                    ###self.n_params, self.band_mapper)
+        ###except TypeError:
+        P_correction = 0. # ;)
+        P_analysis_inverse = P_analysis_inverse - P_correction
+        
         # Done with this observation, move along...
         
         return x_analysis, P_analysis, P_analysis_inverse, innovations

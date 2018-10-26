@@ -148,7 +148,7 @@ def wrapper(the_chunk):
     emulator_folder = "/home/ucfafyi/DATA/Multiply/emus/sail/"
     
     
-    data_folder = "/data/nemesis/S2_data/30/S/WJ/"
+    data_folder = "/data/nemesis/S2_data/32/U/PU/"
     import tempfile
 
     temp_name = next(tempfile._get_candidate_names())

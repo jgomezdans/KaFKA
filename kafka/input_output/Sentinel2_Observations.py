@@ -57,7 +57,13 @@ def reproject_image(source_img, target_img, dstSRSs=None):
     """Reprojects/Warps an image to fit exactly another image.
     Additionally, you can set the destination SRS if you want
     to or if it isn't defined in the source image."""
-    g = gdal.Open(target_img)
+    try:
+        g = gdal.Open(target_img)
+    except RuntimeError:
+        if type(target_img) == gdal.Dataset:
+            g = target_img
+            
+        
     geo_t = g.GetGeoTransform()
     x_size, y_size = g.RasterXSize, g.RasterYSize
     xmin = min(geo_t[0], geo_t[0] + x_size * geo_t[1])
@@ -96,6 +102,7 @@ class Sentinel2Observations(object):
         
         self.parent = parent_folder
         self.emulator_folder = emulator_folder
+        self.original_mask = state_mask
         self.state_mask = state_mask
         self._find_granules(self.parent)
         self.band_map = ['02', '03', '04', '05', '06', '07',
@@ -104,6 +111,18 @@ class Sentinel2Observations(object):
         emulators.sort()
         self.emulator_files = emulators
         self.chunk = chunk
+        
+    def apply_roi(self, ulx, uly, lrx, lry):
+        self.ulx = ulx
+        self.uly = uly
+        self.lrx = lrx
+        self.lry = lry
+        width = lrx - ulx
+        height = uly - lry
+        
+        self.state_mask = gdal.Translate("", self.original_mask,
+                                         srcWin=[ulx, uly, width, abs(height)],
+                                         format="MEM")
 
     def define_output(self):
         try:
@@ -166,6 +185,11 @@ class Sentinel2Observations(object):
         emulator_file = self._find_emulator(sza, saa, vza, vaa)
         emulator = cPickle.load(open(emulator_file, 'rb'),
                                  encoding='latin1' )
+        # emulator is a dictionary with keys 
+        # [b'S2A_MSI_09', b'S2A_MSI_08', b'S2A_MSI_05', 
+        # b'S2A_MSI_04', b'S2A_MSI_07', b'S2A_MSI_06', 
+        # b'S2A_MSI_12', b'S2A_MSI_13', b'S2A_MSI_03', 
+        # b'S2A_MSI_02']
 
         # Read and reproject S2 surface reflectance
         the_band = self.band_map[band]
@@ -188,14 +212,15 @@ class Sentinel2Observations(object):
         emulator_band_map = [2, 3, 4, 5, 6, 7, 8, 9, 12, 13]
         
         
-        R_mat = rho_surface*0.05
+        R_mat = rho_surface*0.01
         R_mat[np.logical_not(mask)] = 0.
         N = mask.ravel().shape[0]
         R_mat_sp = sp.lil_matrix((N, N))
         R_mat_sp.setdiag(1./(R_mat.ravel())**2)
         R_mat_sp = R_mat_sp.tocsr()
 
-        s2_band = bytes("S2A_MSI_{:02d}".format(emulator_band_map[band]), 'latin1' )
+        s2_band = bytes("S2A_MSI_{:02d}".format(
+                        emulator_band_map[band]), 'latin1' )
 
         s2data = S2MSIdata (rho_surface, R_mat_sp, mask, metadata, emulator[s2_band] )
 
