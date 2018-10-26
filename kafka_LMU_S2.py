@@ -86,13 +86,13 @@ if __name__ == "__main__":
         time_grid.append( base + timedelta(days = x) )
         
 
-    Q = np.ones(len(parameter_list))*1e9
-    
-    Q[1] = 0.001
-    Q[6] = 0.005
 
     prior = SAILPrior
     
+    
+    Q = np.ones(len(parameter_list))*1e9
+    Q[1] = 0.001
+    Q[6] = 0.005
     #state_propagator = NoPropagator(Q, len(parameter_list), state_mask)
     state_propagator = IdentityPropagator(Q, len(parameter_list), state_mask)
 
