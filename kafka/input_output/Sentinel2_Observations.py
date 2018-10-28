@@ -106,7 +106,7 @@ class Sentinel2Observations(object):
         self.state_mask = state_mask
         self._find_granules(self.parent)
         self.band_map = ['02', '03', '04', '05', '06', '07',
-                         '08', '8A', '09', '12']
+                         '08', '8A', '11', '12']
         emulators = glob.glob(os.path.join(self.emulator_folder, "*.pkl"))
         emulators.sort()
         self.emulator_files = emulators
