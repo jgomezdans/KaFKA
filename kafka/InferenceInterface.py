@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import logging
 from copy import deepcopy
 from functools import partial
 from pathlib import Path
@@ -10,6 +11,9 @@ from osgeo import gdal
 from kafka.input_output import  get_chunks, KafkaOutput
 from kafka import LinearKalman
 from kafka.inference import create_nonlinear_observation_operator
+
+LOG = logging.getLogger(__name__+".linear_kf")
+
 
 def stitch_outputs(output_folder, parameter_list):
     # Get the output folder
@@ -42,6 +46,7 @@ def stitch_outputs(output_folder, parameter_list):
                                                                             "COMPRESS=DEFLATE"]))
         output_tiffs[parameter] = dst_ds.GetDescription()
         dst_ds = None
+        LOG.info(f"Saved {parameter:s} file as {output_tiffs[parameter]:s}")
     return output_tiffs
         
 
