@@ -76,7 +76,7 @@ def sar_observation_operator(x, theta, polarisation):
     sigma_surf = 10. ** ((C + D * x[:, 1]) / 10.)
 
     sigma_0 = sigma_veg + tau * sigma_surf
-    #pdb.set_trace()
+
 
     # Calculate Gradient (grad has same dimension as x)
     grad = x*0
