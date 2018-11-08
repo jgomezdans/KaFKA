@@ -168,7 +168,6 @@ class S1Observations(object):
         elif band == 1:
             polarisation = 'vh'
         this_file = self.date_data[timestep]
-        import pdb;pdb.set_trace()
         fname = 'NETCDF:"{:s}":sigma0_{:s}_multi'.format(this_file, polarisation)
         #fname = 'NETCDF:"{:s}":sigma0_{:s}'.format(this_file, polarisation)
         obs_ptr = reproject_image(fname, self.state_mask)
