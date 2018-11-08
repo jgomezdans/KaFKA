@@ -164,11 +164,13 @@ class S1Observations(object):
         """
 
         if band == 0:
-            polarisation = 'VV'
+            polarisation = 'vv'
         elif band == 1:
-            polarisation = 'VH'
+            polarisation = 'vh'
         this_file = self.date_data[timestep]
-        fname = 'NETCDF:"{:s}":sigma0_{:s}'.format(this_file, polarisation)
+        import pdb;pdb.set_trace()
+        fname = 'NETCDF:"{:s}":sigma0_{:s}_multi'.format(this_file, polarisation)
+        #fname = 'NETCDF:"{:s}":sigma0_{:s}'.format(this_file, polarisation)
         obs_ptr = reproject_image(fname, self.state_mask)
         observations = self._read_backscatter(obs_ptr)
         uncertainty = self._calculate_uncertainty(observations)
