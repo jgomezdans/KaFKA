@@ -29,7 +29,6 @@ requirements = [
     'gp_emulator',
     'BRDF_descriptors',
     'gdal',
-    # 'BRDF_descriptors', # Not available for automatic installation
     'matplotlib'
 ]
 

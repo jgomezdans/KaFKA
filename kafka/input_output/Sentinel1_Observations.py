@@ -70,6 +70,8 @@ class S1Observations(object):
             splitter = fname.split('_')
             this_date = datetime.datetime.strptime(splitter[5],
                                                    '%Y%m%dT%H%M%S')
+            this_date = this_date.replace(
+                minute=0, hour=0, second=0, microsecond=0)
             self.dates.append(this_date)
             self.date_data[this_date] = fich
         # 2. Store the emulator(s)
@@ -162,14 +164,13 @@ class S1Observations(object):
                 mask, metadata, emulator/used model)
 
         """
-
         if band == 0:
-            polarisation = 'vv'
+            polarisation = 'VV'
         elif band == 1:
-            polarisation = 'vh'
+            polarisation = 'VH'
         this_file = self.date_data[timestep]
-        fname = 'NETCDF:"{:s}":sigma0_{:s}_multi'.format(this_file, polarisation)
-        #fname = 'NETCDF:"{:s}":sigma0_{:s}'.format(this_file, polarisation)
+        fname = 'NETCDF:"{:s}":sigma0_{:s}_multi'.format(this_file,
+                                                         polarisation.lower())
         obs_ptr = reproject_image(fname, self.state_mask)
         observations = self._read_backscatter(obs_ptr)
         uncertainty = self._calculate_uncertainty(observations)
@@ -193,5 +194,8 @@ class S1Observations(object):
 
 
 if __name__ == "__main__":
-    data_folder = "/media/ucfajlg/WERKLY/jose/new/"
-    sentinel1 = S1Observations(data_folder)
+    data_folder = "/data/selene/ucfajlg/ELBARA_LMU/LMU_SAR_testcase"
+    state_mask = "/home/ucfajlg/Data/python/LMU_testcase/data/ESU.tif"
+    s1_observations = S1Observations(data_folder, state_mask)
+    for timestep in s1_observations.dates:
+        retval = s1_observations.get_band_data(timestep, 0)

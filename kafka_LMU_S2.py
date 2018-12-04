@@ -26,21 +26,29 @@ class SAILPrior(object):
         # Cw (g/cm2)  mean=0.017 std_dev=0.0032
         # Tcm = np.exp(-100*0.0140)
         # Tcw = np.exp(-50*0.017)
-        self.mean = np.array([2.1, np.exp(-50./100.),
+        #self.mean = np.array([2.1, np.exp(-50./100.),
+        #                         np.exp(-7.0/100.), 0.1,
+        #                         np.exp(-50*0.017), np.exp(-100.*0.0140),
+        #                         np.exp(-4./2.), 70./90., 0.5, 0.9])
+        #sigma = np.array([0.001, 0.125,
+        #                         0.001, 0.2,
+        #                         0.05, 0.05,
+        #                         0.90, 0.001, 0.001, 0.001])
+        self.mean = np.array([2.1, np.exp(-60./100.),
                                  np.exp(-7.0/100.), 0.1,
-                                 np.exp(-50*0.017), np.exp(-100.*0.0140),
+                                 np.exp(-50*0.0176), np.exp(-100.*0.002),
                                  np.exp(-4./2.), 70./90., 0.5, 0.9])
-        sigma = np.array([0.001, 0.125,
-                                 0.001, 0.2,
-                                 0.05, 0.05,
+        sigma = np.array([0.001, 0.1,
+                                 0.001, 0.005,
+                                 0.001, 0.001,
                                  0.90, 0.001, 0.001, 0.001])
- 
+
         
         self.covar = np.diag(sigma**2).astype(np.float32)
         self.covar[6, 1] = 0.4/np.sqrt(self.covar[1,1]*self.covar[6,6])
         self.covar[1, 6] = 0.4/np.sqrt(self.covar[1,1]*self.covar[6,6])
-        self.covar[3, 1] = -0.98/np.sqrt(self.covar[1,1]*self.covar[3,3])
-        self.covar[1, 3] = -0.98/np.sqrt(self.covar[1,1]*self.covar[3,3])
+        #self.covar[3, 1] = -0.98/np.sqrt(self.covar[1,1]*self.covar[3,3])
+        #self.covar[1, 3] = -0.98/np.sqrt(self.covar[1,1]*self.covar[3,3])
 
         self.inv_covar = np.diag(1./sigma**2).astype(np.float32)
         
@@ -89,8 +97,8 @@ if __name__ == "__main__":
             "/home/ucfafyi/DATA/Multiply/emus/sail/",
             "/home/ucfajlg/Data/python/LMU_testcase/data/ESU.tif")
 
-    base = datetime(2017,6,1)
-    num_days = 120
+    base = datetime(2017,1,1)
+    num_days = 360
     time_grid = []
     for x in range( 0, num_days, 5):
         time_grid.append( base + timedelta(days = x) )
@@ -101,11 +109,11 @@ if __name__ == "__main__":
     
     
     Q = np.ones(len(parameter_list))*1e9
-    Q[1] = 0.002
-    Q[6] = 0.001
-    Q[3] = 0.001
-    Q[4] = 0.0005
-    Q[5] = 0.0005
+    Q[1] = 0.001
+    Q[6] = 0.005
+    #Q[3] = 0.001
+    #Q[4] = 0.0005
+    #Q[5] = 0.0005
     #state_propagator = NoPropagator(Q, len(parameter_list), state_mask)
     state_propagator = IdentityPropagator(Q, len(parameter_list), state_mask)
 

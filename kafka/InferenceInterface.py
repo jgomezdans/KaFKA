@@ -12,8 +12,14 @@ from kafka.input_output import  get_chunks, KafkaOutput
 from kafka import LinearKalman
 from kafka.inference import create_nonlinear_observation_operator
 
-LOG = logging.getLogger(__name__+".linear_kf")
+LOG = logging.getLogger(__name__+".InferenceInterface")
 
+
+import numpy as np
+import gdal
+from pathlib import Path
+import logging
+LOG = logging.getLogger(__name__+".linear_kf")
 
 def stitch_outputs(output_folder, parameter_list):
     # Get the output folder
@@ -22,12 +28,13 @@ def stitch_outputs(output_folder, parameter_list):
     # chunks and dates
     output_tiffs = {}
     for parameter in parameter_list:
-        files = [fich for fich in p.glob(f"{parameter:s}*.tif")]
-        dates = [fich.stem.split(parameter)[1].split("_")[1] 
-                 for fich in files]
+        files = sorted([fich for fich in p.glob(f"{parameter:s}_A*_0x*.tif")])
+        dates = sorted(list(set([fich.stem.split(parameter)[1].split("_")[1] 
+                 for fich in files])))
         fnames = []
         # Now for each data, stitch up all the chunks for that parameter
-        for date in set(dates):
+        for date in dates:
+            print(parameter, date)
             sel_files = [fich.as_posix() 
                          for fich in files if fich.stem.find(date) >= 0 ]
             dst_ds = gdal.BuildVRT((p/f"{parameter:s}_{date:s}.vrt").as_posix(),
@@ -44,11 +51,13 @@ def stitch_outputs(output_folder, parameter_list):
                                 options=gdal.TranslateOptions(format="GTiff",
                                                              creationOptions=["TILED=YES",
                                                                             "COMPRESS=DEFLATE"]))
+        for band in range(1, dst_ds.RasterCount + 1):
+            dst_ds.GetRasterBand(band).SetMetadata({"DoY":dates[band-1][1:]})
         output_tiffs[parameter] = dst_ds.GetDescription()
         dst_ds = None
         LOG.info(f"Saved {parameter:s} file as {output_tiffs[parameter]:s}")
     return output_tiffs
-        
+
 
 def chunk_inference(roi, prefix, current_mask, configuration):
 
