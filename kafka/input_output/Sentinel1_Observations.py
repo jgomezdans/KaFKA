@@ -70,6 +70,8 @@ class S1Observations(object):
             splitter = fname.split('_')
             this_date = datetime.datetime.strptime(splitter[5],
                                                    '%Y%m%dT%H%M%S')
+            this_date = this_date.replace(
+                minute=0, hour=0, second=0, microsecond=0)
             self.dates.append(this_date)
             self.date_data[this_date] = fich
         # 2. Store the emulator(s)
@@ -162,7 +164,6 @@ class S1Observations(object):
                 mask, metadata, emulator/used model)
 
         """
-
         if band == 0:
             polarisation = 'VV'
         elif band == 1:

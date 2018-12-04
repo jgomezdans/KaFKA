@@ -1,0 +1,6 @@
+numpy>=1.14
+scipy>=1.10
+matplotlib>=2.2
+gdal>=2.1
+gp_emulator>=1.6.6
+BRDF_descriptors>=1.2

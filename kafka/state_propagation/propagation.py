@@ -76,6 +76,7 @@ def forward_state_propagation(x_analysis, P_analysis, P_analysis_inv,
     # The next few lines set up propagting the state
     # given a linear(ised) model M and the input
     # state and associated inverse covariance matrix
+    
     A_inv = M_matrix @ P_analysis_inv @ M_matrix.T
     # Set up the approximate inflation matrix
     C_matrix_diagonal = 1./(1 + A_inv.diagonal()*Q_matrix.diagonal())
@@ -89,7 +90,7 @@ def forward_state_propagation(x_analysis, P_analysis, P_analysis_inv,
     mu_prior, c_prior_inv = prior_obj.process_prior(time_step)
     B = c_prior_inv + P_forecast_inv
     y = c_prior_inv @ mu_prior + P_forecast_inv @ x_forecast
-    BI = spl.splu(B)
+    BI = spl.splu(sp.csc_matrix(B))
     x_merged = BI.solve(y)
     
     return x_merged, None, B
