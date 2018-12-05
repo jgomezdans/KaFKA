@@ -51,11 +51,12 @@ def sar_observation_operator(x, theta, polarisation):
     # conversion of incidence angle to radiant
     # the incidence angle itself should probably implemented in x)
     # TODO needs to come from the data
-    theta = np.deg2rad(theta)
+    theta = np.deg2rad(theta.mean())
 
     # Simpler definition of cosine of theta
+    # Averaged over scene.
     mu = np.cos(theta)
-
+    
     # the model parameters (A, B, C, D, E) for different polarisations
     parameters = {'VV': [0.0846, 0.0615, -14.8465, 15.907, 1.],
                   'VH': [0.0795, 0.1464, -14.8332, 15.907, 0.]}
@@ -88,12 +89,12 @@ def sar_observation_operator(x, theta, polarisation):
         z1 = np.power(x[i, 0], E-1.)
         if np.isnan(z1):
             z1 = 1.
-        tau_value = np.exp(-2. * B / mu[i] * x[i, 0])
-        grad[i, 0] = A * E * mu[i] * z1 * (1. - tau_value) + \
+        tau_value = np.exp(-2. * B / mu * x[i, 0])
+        grad[i, 0] = A * E * mu * z1 * (1. - tau_value) + \
             2. * A * B * z * tau_value - (
             (2. ** (1/10. * (C + D * x[i, 1]) + 1.)) *
             (5. ** (1/10. * (C + D * x[i, 1])) * B * tau_value)
-            ) / mu[i]
+            ) / mu
         grad[i, 1] = D * np.log(10.) * tau_value * 10. ** (
             1./10. * (C + D * x[i, 1]) - 1.)
 
@@ -107,7 +108,8 @@ def sar_observation_operator(x, theta, polarisation):
 
 
 def create_sar_observation_operator(n_params, forward_model, metadata,
-                                    mask, state_mask,  x_forecast, band):
+                                    mask, state_mask,  x_forecast, band,
+                                    band_mapper=None):
     """Creates the SAR observation operator using the Water Cloud SAR forward
     model (defined above).
 
@@ -134,7 +136,7 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     H0, dH
     """
     LOG.info("Creating the ObsOp for band %d" % band)
-    n_times = x_forecast.shape[0] / n_params
+    n_times = x_forecast.shape[0] // n_params
     # good_obs = mask.sum()
     H_matrix = sp.lil_matrix((n_times, n_params * n_times),
                              dtype=np.float32)
