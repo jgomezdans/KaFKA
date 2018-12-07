@@ -152,9 +152,10 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     # This loop can be JIT'ed
     x0 = np.zeros((n_times, n_params))
     theta = np.zeros((n_times))
+    state_mapper = np.arange(n_params, dtype=np.int16)
     for i, m in enumerate(mask[state_mask].flatten()):
         if m:
-            x0[i, :] = x_forecast[(n_params * i): (n_params*(i+1))]
+            x0[i, :] = x_forecast[(n_params*i) + state_mapper]
             theta[i] = 23.#metadata['incidence_angle']
     LOG.info("Running SAR forward model")
     # Calls the run_emulator method that only does different vectors
@@ -168,7 +169,7 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     
     for i, m in enumerate(mask[state_mask].flatten()):
         if m:
-            H_matrix[i, (n_params * i): (n_params*(i+1))] = dH[n]
+            H_matrix[i, state_mapper + n_params * i] = dH[n]
             H0[i] = H0_[n]
             n += 1
     LOG.info("\tDone!")

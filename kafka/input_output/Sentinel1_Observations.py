@@ -168,7 +168,7 @@ class S1Observations(object):
         """
 
         # first approximation of uncertainty (1 dB)
-        unc = backscatter*0.05
+        unc = backscatter*0.1
 
 
         # need to find a good way to calculate ENL

@@ -117,6 +117,7 @@ def variational_kalman_multiband(observations_b, mask_b, state_mask,
         R_mat.append(c)
         y.append(d)
         y_orig.append(e)
+    import pdb;pdb.set_trace()
     H_matrix_ = sp.vstack(H_matrix)
     H0 = np.hstack(H0)
     R_mat = sp.diags(np.hstack(R_mat))
