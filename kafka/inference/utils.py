@@ -162,15 +162,34 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     LOG.info("Storing emulators in H matrix")
     # This loop can be JIT'ed too
     n = 0
+    nn = 0
+    ii = np.zeros(n_params*np.sum(mask[state_mask]), dtype=np.int16)
+    jj = np.zeros(n_params*np.sum(mask[state_mask]), dtype=np.int16)
+    HH = np.zeros(n_params*np.sum(mask[state_mask]), dtype=np.float32)
     for i, m in enumerate(mask[state_mask].flatten()):
         if m:
-            H_matrix[i, state_mapper + n_params * i] = dH[n]
-            H0[i] = H0_[n]
-            n += 1
-
+            H0[i] = H0_[nn]
+            for j, s in enumerate(state_mapper):
+                ii[n] = i
+                jj[n] = s + n_params*i
+                HH[n] = dH[nn, s]
+                n += 1
+            nn += 1
+    H_matrix_FAST = sp.coo_matrix((HH,(ii, jj)), 
+                                  (n_times, n_params * n_times),
+                                  dtype=np.float32)
+    ####n = 0
+    ####for i, m in enumerate(mask[state_mask].flatten()):
+        ####if m:
+            ####H_matrix[i, state_mapper + n_params * i] = dH[n]
+            ####H0[i] = H0_[n]
+            ####n += 1
+    ####assert np.allclose(H_matrix.todense(), H_matrix_FAST.todense())
+    ####print(np.allclose(H_matrix.todense(), H_matrix_FAST.todense()))
+    ####print("Matrices are equivalent!")
     LOG.info("\tDone!")
 
-    return (H0, H_matrix.tocsr())
+    return (H0, H_matrix_FAST.tocsr())
 
 
 

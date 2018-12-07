@@ -34,7 +34,7 @@ def stitch_outputs(output_folder, parameter_list):
         fnames = []
         # Now for each data, stitch up all the chunks for that parameter
         for date in dates:
-            print(parameter, date)
+            
             sel_files = [fich.as_posix() 
                          for fich in files if fich.stem.find(date) >= 0 ]
             dst_ds = gdal.BuildVRT((p/f"{parameter:s}_{date:s}.vrt").as_posix(),
@@ -79,7 +79,7 @@ def chunk_inference(roi, prefix, current_mask, configuration):
     state_propagator.n_elements = current_mask.sum()
     kf = LinearKalman(configuration.observations, 
                       output, current_mask, 
-                      create_nonlinear_observation_operator, 
+                      configuration.observation_operator_creator,
                       configuration.parameter_list,
                       state_propagation=state_propagator.get_matrices,
                       prior=the_prior, 
@@ -116,15 +116,19 @@ def chunk_wrapper(the_chunk, config):
 def kafka_inference(mask, time_grid, parameter_list,
                     observations, prior, propagator,
                     output_folder, band_mapper, dask_client,
+                    observation_operator_creator,
                     chunk_size=[64, 64]):
     
     # First, put the configuration in its own object to minimise
     # variable transport
     
     Config = namedtuple("Config", ["mask", "time_grid", "parameter_list",
-                                   "observations", "prior", "propagator",
+                                   "observations", 
+                                   "observation_operator_creator",
+                                   "prior", "propagator",
                                    "output_folder", "band_mapper"])    
     config = Config(mask, time_grid, parameter_list, observations,
+                    observation_operator_creator,
                     prior, propagator, output_folder, band_mapper)
     nx, ny = mask.shape
     them_chunks = [the_chunk for the_chunk in get_chunks(nx, ny,
