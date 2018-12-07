@@ -215,9 +215,11 @@ class Sentinel2Observations(object):
         R_mat = rho_surface*0.01
         R_mat[np.logical_not(mask)] = 0.
         N = mask.ravel().shape[0]
-        R_mat_sp = sp.lil_matrix((N, N))
-        R_mat_sp.setdiag(1./(R_mat.ravel())**2)
-        R_mat_sp = R_mat_sp.tocsr()
+        main_diag = 1./(R_mat.ravel())**2
+        R_mat_sp = sp.spdiags([main_diag], [0], N, N)
+        #R_mat_sp = sp.dia_matrix(shape=(N, N))
+        #R_mat_sp.setdiag(1./(R_mat.ravel())**2)
+        #R_mat_sp = R_mat_sp.tocsr()
 
         s2_band = bytes("S2A_MSI_{:02d}".format(
                         emulator_band_map[band]), 'latin1' )

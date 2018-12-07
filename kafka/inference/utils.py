@@ -66,7 +66,9 @@ def run_emulator(gp, x, tol=None):
     # We select the unique values in vector x
     # Note that we could have done this using e.g. a histogram
     # or some other method to select solutions "close enough"
-    unique_vectors = np.vstack({tuple(row) for row in x})
+    #unique_vectors = np.vstack({tuple(row) for row in x})
+    unique_vectors, unique_indices, unique_inverse = np.unique(x,
+                                                               axis=0, return_index=True, return_inverse=True)
     if len(unique_vectors) == 1:  # Prior!
         cluster_labels = np.zeros(x.shape[0], dtype=np.int16)
     elif len(unique_vectors) > 1e6:
@@ -88,19 +90,31 @@ def run_emulator(gp, x, tol=None):
 
     H = np.zeros(x.shape[0])
     dH = np.zeros_like(x)
-    try:
+    if 'cluster_labels' in locals():
         nclust = cluster_labels.shape
-    except NameError:
-        for i, uniq in enumerate(unique_vectors):
-            passer = np.all(x == uniq, axis=1)
-            H[passer] = H_[i]
-            dH[passer, :] = dH_[i, :]
+        for label in np.unique(cluster_labels):
+            H[cluster_labels == label] = H_[label]
+            dH[cluster_labels == label, :] = dH_[label, :]
         return H, dH
-
-    for label in np.unique(cluster_labels):
-        H[cluster_labels == label] = H_[label]
-        dH[cluster_labels == label, :] = dH_[label, :]
+    H[unique_indices] = H_
+    H = H[unique_inverse]
+    dH[unique_indices] = dH_
+    dH = dH[unique_inverse]
     return H, dH
+
+    ##try:
+        ##nclust = cluster_labels.shape
+    ##except NameError:
+        ##for i, uniq in enumerate(unique_vectors):
+            ##passer = np.all(x == uniq, axis=1)
+            ##H[passer] = H_[i]
+            ##dH[passer, :] = dH_[i, :]
+        ##return H, dH
+
+    ##for label in np.unique(cluster_labels):
+        ##H[cluster_labels == label] = H_[label]
+        ##dH[cluster_labels == label, :] = dH_[label, :]
+    ##return H, dH
 
 
 def create_uncertainty(uncertainty, mask):
