@@ -170,6 +170,10 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
             n += 1
 
     LOG.info("\tDone!")
+    if hasattr(emulator, "hessian"):
+        calc_hess = True
+    else:
+        calc_hess = False
 
     if calc_hess:
         ddH = emulator.hessian(x0[mask[state_mask]])

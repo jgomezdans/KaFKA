@@ -69,7 +69,8 @@ class LinearKalman (object):
                  create_observation_operator, parameters_list,
                  state_propagation,
                  band_mapper=None,
-                 linear=True, diagnostics=True, prior=None):
+                 linear=True, diagnostics=True, prior=None,
+                 upper_bound=None, lower_bound=None):
         """The class creator takes (i) an observations object, (ii) an output
         writer object, (iii) the state mask (a boolean 2D array indicating which
         pixels are used in the inference), and additionally, (iv) a state
@@ -103,6 +104,8 @@ class LinearKalman (object):
         # specific functions. All priors need a dictionary with ['function'] key.
         # Other keys are optional
         self._create_observation_operator = create_observation_operator
+        self.upper_bound = upper_bound
+        self.lower_bound = lower_bound
         LOG.info("Starting KaFKA run!!!")
 
     def advance(self, x_analysis, P_analysis, P_analysis_inverse):
@@ -244,7 +247,6 @@ class LinearKalman (object):
             UNC = []
             META = []
             H_matrix = []
-            import pdb;pdb.set_trace()
             for band, data in enumerate(current_data):
                 # Create H0 and H_matrix around x_prev
                 # Also extract single band information from nice package
@@ -263,7 +265,10 @@ class LinearKalman (object):
                                                             x_prev,
                                                             band,
                                                             band_mapper = self.band_mapper)
-                    H_matrix.append(H_matrix_)
+                    if len(H_matrix_) == 2:
+                        H_matrix.append(H_matrix_)
+                    elif len(H_matrix_) == 3:
+                        H_matrix.append([H_matrix_[0], H_matrix_[1]])
                     Y.append(data.observations)
                     MASK.append(data.mask)
                     UNC.append(data.uncertainty)
@@ -329,25 +334,26 @@ class LinearKalman (object):
             
             INNOVATIONS = np.split(innovations, n_bands)
             # Need to plot the goodness of fit somewhere...
-            #import matplotlib.pyplot as plt
-            #M = []
-            #print(f"Iteration: {n_iter-1:d}")
-            #for band in range(n_bands):
-                #t = np.zeros_like(self.state_mask).astype(np.float)            
-                #t[self.state_mask*MASK[band]] = INNOVATIONS[band]
-                #M.append(t)
-                #print(f"\tBand: {band:d}, {np.mean(INNOVATIONS[band]):f}")
-            #print(f"Timestep {timestep.isoformat():s}")
-            #print(f"\tavg TLAI: {x_analysis[6::10].mean():f}")
-            #print(f"\tavg TCAB: {x_analysis[1::10].mean():f}")
-            #print(f"\tavg N: {x_analysis[0::10].mean():f}")
-            #plt.figure()
-            #t = np.zeros_like(self.state_mask).astype(np.float)
-            #t[self.state_mask] = -2*np.log(x_analysis[6::10])
-            #plt.imshow(t, interpolation="nearest", vmin=0,
-            #           vmax=5, cmap=plt.cm.inferno)
-            #plt.title(f"Iteration:  {n_iter-1:d}")
-            
+            import matplotlib.pyplot as plt
+            M = []
+            print(f"Iteration: {n_iter-1:d}")
+            for band in range(n_bands):
+                t = np.zeros_like(self.state_mask).astype(np.float)            
+                t[self.state_mask*MASK[band]] = INNOVATIONS[band]
+                M.append(t)
+                print(f"\tBand: {band:d}, {np.mean(INNOVATIONS[band]):f}")
+            print(f"Timestep {timestep.isoformat():s}")
+            print(f"\tavg TLAI: {x_analysis[6::10].mean():f}")
+            print(f"\tavg TCAB: {x_analysis[1::10].mean():f}")
+            print(f"\tavg N: {x_analysis[0::10].mean():f}")
+            plt.figure()
+            t = np.zeros_like(self.state_mask).astype(np.float)
+            t[self.state_mask] = -2*np.log(x_analysis[6::10])
+            plt.imshow(t, interpolation="nearest", vmin=0,
+                       vmax=5, cmap=plt.cm.inferno)
+            plt.title(f"{timestep.isoformat():s} Iter: {n_iter-1:d}")
+            plt.show()
+            import ipdb;ipdb.set_trace()
             
 
         
@@ -378,131 +384,18 @@ class LinearKalman (object):
         
         return x_analysis, P_analysis, P_analysis_inverse, innovations
                 
-    def assimilate(self, locate_times, x_forecast, P_forecast,
-                   P_forecast_inverse,
-                   approx_diagonal=True, refine_diag=False,
-                   iter_obs_op=False, is_robust=False, diag_str="diag"):
-        """The method assimilates the observatins at timestep `timestep`, using
-        a prior a multivariate Gaussian distribution with mean `x_forecast` and
-        variance `P_forecast`."""
-        for step in locate_times:
-            LOG.info("Assimilating %s..." % step.strftime("%Y-%m-%d"))
-            for band in range(self.observations.bands_per_observation[step]):
-                x_analysis, P_analysis, P_analysis_inverse, innovations = \
-                    self.assimilate_band(band, step, x_forecast, P_forecast,
-                                         P_forecast_inverse)
-                # Once the band is assimilated, the posterior (i.e. analysis)
-                # becomes the prior (i.e. forecast)
-                x_forecast = x_analysis*1.
-                if P_analysis is not None:
-                    P_forecast = P_analysis*1.
-                else:
-                    P_forecast = None
-                if P_analysis_inverse is not None:
-                    P_forecast_inverse = P_analysis_inverse*1.
-                else:
-                    P_forecast_inverse = None
-                #P_forecast_inv = P_analysis_inverse*1.
-
-        self.previous_state = Previous_State(step, x_analysis,
-                                             P_analysis, P_analysis_inverse)
-
-        return x_analysis, P_analysis, P_analysis_inverse
-
-    def assimilate_band(self, band, timestep, x_forecast, P_forecast,
-                        P_forecast_inverse, convergence_tolerance=1e-3,
-                        min_iterations=1):
-        """A method to assimilate a band using an interative linearisation
-        approach.  This method isn't very sexy, just (i) reads the data, (ii)
-        iterates over the solution, updating the linearisation point and calls
-        the solver a few times. Most of the work is done by the methods that
-        are being called from withing, but the structure is less confusing.
-        There are some things missing, such as a "robust" method and I am yet
-        to add the correction to the Hessian at the end of the method just
-         before it returns to the caller."""
-
-        # Read the relevant data for cufrent timestep and band
-        data = self.observations.get_band_data(timestep, band)
-        not_converged = True
-        # Linearisation point is set to x_forecast for first iteration
-        x_prev = x_forecast*1.
-        n_iter = 1
-        while not_converged:
-            # Create H matrix
-            H_matrix = self._create_observation_operator(self.n_params,
-                                                         data.emulator,
-                                                         data.metadata,
-                                                         data.mask,
-                                                         self.state_mask,
-                                                         x_prev,
-                                                         band)
-            x_analysis, P_analysis, P_analysis_inverse, \
-                innovations, fwd_modelled = self.solver(
-                    data.observations, data.mask, H_matrix, x_forecast,
-                    P_forecast, P_forecast_inverse, data.uncertainty,
-                    data.metadata)
-
-            # Test convergence. We calculate the l2 norm of the difference
-            # between the state at the previous iteration and the current one
-            # There might be better tests, but this is quite straightforward
-            passer_mask = data.mask[self.state_mask]
-            maska = np.concatenate([passer_mask.ravel()
-                                    for i in range(self.n_params)])
-            convergence_norm = np.linalg.norm(x_analysis[maska] -
-                                              x_prev[maska])/float(maska.sum())
-            LOG.info(
-                "Band {:d}, Iteration # {:d}, convergence norm: {:g}".format(
-                    band, n_iter, convergence_norm))
-            if (convergence_norm < convergence_tolerance) and (
-                    n_iter >= min_iterations):
-                # Converged!
-                not_converged = False
-            elif n_iter > 25:
-                # Too many iterations
-                LOG.warning("Bailing out after 25 iterations!!!!!!")
-                not_converged = False
-
-            x_prev = x_analysis
-            n_iter += 1
-        # Correct hessian for higher order terms
-        P_correction = hessian_correction(data.emulator, x_analysis,
-                                          data.uncertainty, innovations,
-                                          data.mask, self.state_mask, band,
-                                          self.n_params)
-        P_analysis_inverse = P_analysis_inverse - P_correction
-        # P_analysis_inverse = UPDATE HESSIAN WITH HIGHER ORDER CONTRIBUTION
-        import matplotlib.pyplot as plt
-        M = self.state_mask*1.
-        M[self.state_mask] = x_analysis[6::7]
-        plt.figure()
-        plt.imshow(M[650:730, 1180:1280], interpolation="nearest", vmin=0.1, vmax=0.5)
-        plt.title("Band: %d, Date:"%band + timestep.strftime("%Y-%m-%d"))
-        
-        return x_analysis, P_analysis, P_analysis_inverse, innovations
-
-    def solver(self, observations, mask, H_matrix, x_forecast, P_forecast,
-               P_forecast_inv, R_mat, the_metadata):
-
-        x_analysis, P_analysis, P_analysis_inv, \
-            innovations_prime, fwd_modelled = \
-            variational_kalman(
-                observations, mask, self.state_mask, R_mat, H_matrix,
-                self.n_params,
-                x_forecast, P_forecast, P_forecast_inv, the_metadata)
-
-        return x_analysis, P_analysis, P_analysis_inv, \
-            innovations_prime, fwd_modelled
 
 
     def solver_multiband(self, observations, mask, H_matrix, x0, x_forecast, P_forecast,
                P_forecast_inv, R_mat, the_metadata):
-
+        
         x_analysis, P_analysis, P_analysis_inv, \
             innovations_prime, fwd_modelled = \
             variational_kalman_multiband(
                 observations, mask, self.state_mask, R_mat, H_matrix,
                 self.n_params, x0,
-                x_forecast, P_forecast, P_forecast_inv, the_metadata)
+                x_forecast, P_forecast, P_forecast_inv, the_metadata,
+                upper_bound=self.upper_bound, lower_bound=self.lower_bound)
 
         return x_analysis, P_analysis, P_analysis_inv, \
             innovations_prime, fwd_modelled

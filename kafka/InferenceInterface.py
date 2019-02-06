@@ -84,7 +84,8 @@ def chunk_inference(roi, prefix, current_mask, configuration):
                       state_propagation=state_propagator.get_matrices,
                       prior=the_prior, 
                       band_mapper=configuration.band_mapper,
-                      linear=False)
+                      linear=False, upper_bound=configuration.upper_bounds,
+                      lower_bound=configuration.lower_bounds)
 
     # Get starting state... We can request the prior object for this
     x_forecast, P_forecast_inv = the_prior.process_prior(None)
@@ -102,7 +103,7 @@ def chunk_wrapper(the_chunk, config):
     lry = this_Y + ny_valid
     
     roi = [ulx, uly, lrx, lry]
-    
+
     if config.mask[this_Y:(this_Y+ny_valid), this_X:(this_X+nx_valid)].sum() > 0:   
         print("Running chunk %s" % ( hex(chunk)))
         chunk_inference(roi, hex(chunk), 
@@ -117,7 +118,8 @@ def kafka_inference(mask, time_grid, parameter_list,
                     observations, prior, propagator,
                     output_folder, band_mapper, dask_client,
                     observation_operator_creator,
-                    chunk_size=[64, 64]):
+                    chunk_size=[64, 64], upper_bounds=None,
+                    lower_bounds=None):
     
     # First, put the configuration in its own object to minimise
     # variable transport
@@ -126,11 +128,14 @@ def kafka_inference(mask, time_grid, parameter_list,
                                    "observations", 
                                    "observation_operator_creator",
                                    "prior", "propagator",
-                                   "output_folder", "band_mapper"])    
+                                   "output_folder", "band_mapper",
+                                   "upper_bounds", "lower_bounds"])    
     config = Config(mask, time_grid, parameter_list, observations,
                     observation_operator_creator,
-                    prior, propagator, output_folder, band_mapper)
-    nx, ny = mask.shape
+                    prior, propagator, output_folder, band_mapper,
+                    upper_bounds, lower_bounds)
+    ny, nx= mask.shape
+    
     them_chunks = [the_chunk for the_chunk in get_chunks(nx, ny,
                     block_size= chunk_size)]
     

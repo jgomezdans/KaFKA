@@ -100,7 +100,8 @@ def sort_band_data(H_matrix, observations, uncertainty, mask,
 def variational_kalman_multiband(observations_b, mask_b, state_mask, 
                                  uncertainty_b, H_matrix_b, n_params,
                                  x0, x_forecast, P_forecast, P_forecast_inv,
-                                 the_metadata_b, approx_diagonal=True):
+                                 the_metadata_b, approx_diagonal=True,
+                                 upper_bound=None, lower_bound=None):
     """We can just use """
     n_bands = len(observations_b)
     
@@ -117,7 +118,6 @@ def variational_kalman_multiband(observations_b, mask_b, state_mask,
         R_mat.append(c)
         y.append(d)
         y_orig.append(e)
-    import pdb;pdb.set_trace()
     H_matrix_ = sp.vstack(H_matrix)
     H0 = np.hstack(H0)
     R_mat = sp.diags(np.hstack(R_mat))
@@ -135,6 +135,24 @@ def variational_kalman_multiband(observations_b, mask_b, state_mask,
     LOG.info("Solving")
     AI = sp.linalg.splu (A)
     x_analysis = AI.solve (b)
+    n_elems = n_params*state_mask.sum()
+    if upper_bound is None:
+        hi = None
+    else:
+        hi = np.zeros_like(x_analysis)
+        for j, (k, v) in enumerate(upper_bound.items()):
+            hi[j::n_params] = v
+
+        
+    if lower_bound is  None:
+        lo = None
+    else:
+        lo = np.zeros_like(x_analysis)
+        for j, (k, v) in enumerate(lower_bound.items()):
+            lo[j::n_params] = v
+        
+
+    x_analysis = np.clip(x_analysis, lo, hi)
     # So retval is the solution vector and A is the Hessian 
     # (->inv(A) is posterior cov)
     fwd_modelled = H_matrix_.dot(x_analysis-x_forecast) + H0
