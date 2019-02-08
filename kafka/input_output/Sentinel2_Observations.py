@@ -106,9 +106,7 @@ class Sentinel2Observations(object):
         self.state_mask = state_mask
         self._find_granules(self.parent)
         self.band_map = ['02', '03', '04', '05', '06', '07',
-                         '08', '8A', '11', '12']
-        # 10 m +redEdgebands
-        self.band_map = ["02", "03", "04", "05", "06", "07", "08"]
+                              '08', '12']
         emulators = glob.glob(os.path.join(self.emulator_folder, "*.pkl"))
         emulators.sort()
         self.emulator_files = emulators
@@ -161,7 +159,7 @@ class Sentinel2Observations(object):
         LOG.info(f"Last granule: {sorted(self.dates)[-1].strftime('%Y-%m-%d'):s}")
                               
         for the_date in self.dates:
-            self.bands_per_observation[the_date] = 7 # 10m +redEdgebands
+            self.bands_per_observation[the_date] = 8 # 10m +redEdgebands
 
 
     def _find_emulator(self, sza, saa, vza, vaa):
@@ -193,7 +191,8 @@ class Sentinel2Observations(object):
         # This should be really using EmulatorEngine...
         emulator_file = self._find_emulator(sza, saa, vza, vaa)
         emulator = cPickle.load(open(emulator_file, 'rb'),
-                                 encoding='latin1' )
+                                 encoding='latin1')
+        
         # emulator is a dictionary with keys 
         # [b'S2A_MSI_09', b'S2A_MSI_08', b'S2A_MSI_05', 
         # b'S2A_MSI_04', b'S2A_MSI_07', b'S2A_MSI_06', 
@@ -222,9 +221,15 @@ class Sentinel2Observations(object):
         # Read and reproject S2 angles
         
         #emulator_band_map = [2, 3, 4, 5, 6, 7, 8, 9, 12]
-        emulator_band_map = [2, 3, 4, 5, 6, 7, 8]
+        #emulator_band_map = [2, 3, 4, 5, 6, 7, 8]
         
-        R_mat = rho_surface*0. + 0.02
+        band_dictionary = {'02':2, '03': 3, '04': 4, '05': 5, '06': 6, '07':7, '08': 8, '8A': 9, '09': 10, '11': 12, '12': 13}
+        
+        emulator_band_map = []
+        for i in self.band_map:
+            emulator_band_map.append(band_dictionary[i])
+        
+        R_mat = rho_surface*0.05# + self.band_unc[band]
         R_mat[np.logical_not(mask)] = 0.
         N = mask.ravel().shape[0]
         R_mat_sp = sp.lil_matrix((N, N))
@@ -233,7 +238,7 @@ class Sentinel2Observations(object):
 
         s2_band = bytes("S2A_MSI_{:02d}".format(
                         emulator_band_map[band]), 'latin1' )
-
+        print(">>>", original_s2_file, emulator_file, s2_band)
         s2data = S2MSIdata (rho_surface, R_mat_sp, mask, metadata, emulator[s2_band] )
 
         return s2data
