@@ -223,7 +223,12 @@ class Sentinel2Observations(object):
         #emulator_band_map = [2, 3, 4, 5, 6, 7, 8, 9, 12]
         #emulator_band_map = [2, 3, 4, 5, 6, 7, 8]
         
-        band_dictionary = {'02':2, '03': 3, '04': 4, '05': 5, '06': 6, '07':7, '08': 8, '8A': 9, '09': 10, '11': 12, '12': 13}
+        # This needs to be cleaned up...
+        band_dictionary = {'02':2, '03': 3, '04': 4, 
+                           '05': 5, '06': 6, 
+                           '07':7, '08': 8, 
+                           '8A': 9, '09': 10, 
+                           '11': 12, '12': 13}
         
         emulator_band_map = []
         for i in self.band_map:
@@ -232,16 +237,15 @@ class Sentinel2Observations(object):
         R_mat = rho_surface*0.05# + self.band_unc[band]
         R_mat[np.logical_not(mask)] = 0.
         N = mask.ravel().shape[0]
-        main_diag = 1./(R_mat.ravel())**2
-        R_mat_sp = sp.spdiags([main_diag], [0], N, N)
-        #R_mat_sp = sp.dia_matrix(shape=(N, N))
-        #R_mat_sp.setdiag(1./(R_mat.ravel())**2)
-        #R_mat_sp = R_mat_sp.tocsr()
+        R_mat_sp = sp.lil_matrix((N, N))
+        R_mat_sp.setdiag(1./(R_mat.ravel())**2)
+        R_mat_sp = R_mat_sp.tocsr()
 
         s2_band = bytes("S2A_MSI_{:02d}".format(
                         emulator_band_map[band]), 'latin1' )
-        print(">>>", original_s2_file, emulator_file, s2_band)
-        s2data = S2MSIdata (rho_surface, R_mat_sp, mask, metadata, emulator[s2_band] )
+        
+        s2data = S2MSIdata (rho_surface, R_mat_sp, mask,
+                            metadata, emulator[s2_band] )
 
         return s2data
 
