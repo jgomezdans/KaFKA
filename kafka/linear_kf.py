@@ -40,6 +40,7 @@ from .inference import iterate_time_grid
 from .inference import hessian_correction
 from .inference import hessian_correction_multiband
 from .inference import robust_inflation
+from .inference import non_linear_solver
 
 from .state_propagation import forward_state_propagation
 
@@ -59,6 +60,97 @@ __email__ = "j.gomez-dans@ucl.ac.uk"
 Metadata = namedtuple('Metadata', 'mask uncertainty')
 Previous_State = namedtuple("Previous_State",
                             "timestamp x_vect cov_m icov_mv")
+
+
+def calculate_convergence_tests(x_analysis, x_prev, n_iter, min_iterations,
+                                previous_convergence, convergence_tolerance):
+
+    # Test convergence. We calculate the l2 norm of the difference
+    # between the state at the previous iteration and the current one
+    # There might be better tests, but this is quite straightforward
+    #passer_mask = data.mask[self.state_mask]
+    #maska = np.concatenate([passer_mask.ravel()
+    #                        for i in range(self.n_params)])
+    #convergence_norm = np.linalg.norm(x_analysis[maska] -
+    #                                  x_prev[maska])/float(maska.sum())
+    convergence_norm = np.linalg.norm(x_analysis - x_prev)/float(len(x_analysis))
+    LOG.info(
+        "Iteration # {:d}, convergence norm: {:g}".format(
+            n_iter, convergence_norm))
+    if (convergence_norm < convergence_tolerance) and (
+            n_iter >= min_iterations):
+        # Converged!
+        LOG.info("Converged sensibly")
+        not_converged = False
+    elif previous_convergence < convergence_norm:
+        # Too many iterations
+        LOG.info("Diverging solution. Bailing out here")
+        # Return previous solution
+        LOG.info("--> Returning previous solution! :-0")
+        x_analysis = x_prev*1.
+        not_converged = False
+        return not_converged, x_analysis, convergence_norm
+    elif n_iter > 25:
+        # Too many iterations
+        LOG.warning("Bailing out after 25 iterations!!!!!!")
+        not_converged = False
+    else:
+        not_converged = True
+    return not_converged, convergence_norm
+
+
+def extract_data_and_create_observation_operator(x_linearisation,
+                                                 current_data, n_params,
+                                                 band_mapper, state_mask,
+                                                 create_H_matrix_function):
+    """A function that extarcts the data from a `current_data` object (this
+    contains a set of fields with the data, uncertainties, data masks and so
+    on). The function will also provide the linearised observation operators
+    by calling an arbitrary `crate_H_matrix_function` that creates linearises
+    the model around the point `x_linearisation`. The function will return 
+    `None` if there weren't any unmasked pixels.
+    
+    """
+    Y = []
+    MASK = []
+    UNC = []
+    META = []
+    H_matrix = []
+    for band, data in enumerate(current_data):
+        # Create H0 and H_matrix around x_prev
+        # Also extract single band information from nice package
+        # this allows us to use the same interface as current
+        # Deferring processing to a new solver method in solvers.py
+        # Note that we could well do with passing `self.band_mapper`
+        n_good_obs = np.sum(data.mask * state_mask)
+        if n_good_obs > 0:
+            # Calculate H matrix & H0 vector around the linearisation
+            # point given by x_prev
+            H_matrix_= create_H_matrix_function(n_params,
+                                                data.emulator,
+                                                data.metadata,
+                                                data.mask,
+                                                state_mask,
+                                                x_linearisation,
+                                                band,
+                                                band_mapper = band_mapper)
+            if len(H_matrix_) == 2:
+                H_matrix.append(H_matrix_)
+            elif len(H_matrix_) == 3:
+                H_matrix.append([H_matrix_[0], H_matrix_[1]])
+            Y.append(data.observations)
+            MASK.append(data.mask)
+            UNC.append(data.uncertainty)
+            META.append(data.metadata)
+            
+        else:
+            LOG.info(f"Band {band+1:d} didn't have unmasked pixels")
+    if len(Y) == 0:
+        LOG.info("Couldn't find any usable (=unmasked) pixels."
+                    "Not inverting anything. ")
+        return None
+    else:
+        return H_matrix, Y, MASK, UNC, META
 
 
 class LinearKalman (object):
@@ -234,98 +326,57 @@ class LinearKalman (object):
 
     def do_all_bands(self, timestep, current_data, x_forecast, P_forecast,
                         P_forecast_inverse, convergence_tolerance=1e-3,
-                        min_iterations=0, is_robust=False):
+                        min_iterations=3, is_robust=False):
         not_converged = True
         # Linearisation point is set to x_forecast for first iteration
         x_prev = x_forecast*1.
         n_iter = 1
         n_bands = len(current_data)
         previous_convergence = 1e9
+        #### Needs testing with NONLINEAR SOLVER
+        ###print("NONLINEAR SOLVER INNIT")
+        ###########################
+        ###x_NL = non_linear_solver(x_forecast, P_forecast_inverse, 
+                                ###current_data, self.state_mask,
+                            ###self.n_params, self.band_mapper)
+        ###x_prev = x_NL
         while not_converged:
-            Y = []
-            MASK = []
-            UNC = []
-            META = []
-            H_matrix = []
-            for band, data in enumerate(current_data):
-                # Create H0 and H_matrix around x_prev
-                # Also extract single band information from nice package
-                # this allows us to use the same interface as current
-                # Deferring processing to a new solver method in solvers.py
-                # Note that we could well do with passing `self.band_mapper`
-                n_good_obs = np.sum(data.mask * self.state_mask)
-                if n_good_obs > 0:
-                    # Calculate H matrix & H0 vector around the linearisation
-                    # point given by x_prev
-                    H_matrix_= self._create_observation_operator(self.n_params,
-                                                            data.emulator,
-                                                            data.metadata,
-                                                            data.mask,
-                                                            self.state_mask,
-                                                            x_prev,
-                                                            band,
-                                                            band_mapper = self.band_mapper)
-                    if len(H_matrix_) == 2:
-                        H_matrix.append(H_matrix_)
-                    elif len(H_matrix_) == 3:
-                        H_matrix.append([H_matrix_[0], H_matrix_[1]])
-                    Y.append(data.observations)
-                    MASK.append(data.mask)
-                    UNC.append(data.uncertainty)
-                    META.append(data.metadata)
-                else:
-                    LOG.info(f"Band {band+1:d} didn't have unmasked pixels")
-            if len(Y) == 0:
-                LOG.info("Couldn't find any usable (=unmasked) pixels."
-                          "Not inverting anything. ")
-                ### Must check what the innovations are used for further down
+            # Get the data
+            retval = extract_data_and_create_observation_operator(x_prev,
+                                                 current_data, self.n_params,
+                                                 self.band_mapper, self.state_mask,
+                                                 self._create_observation_operator)
+            if retval is None:
+                # The product of the data & state masks yields no useable 
+                # pixels, so we just return the input to the function as its
+                # output
                 return x_forecast, P_forecast, P_forecast_inverse, None
+            else:
+                # We found some useable data, let's unpack it
+                H_matrix, Y, MASK, UNC, META = retval
             
+            ########################
             # Now call the solver 
+            ########################
             x_analysis, P_analysis, P_analysis_inverse, \
                 innovations, fwd_modelled = self.solver_multiband(
                     Y, MASK, H_matrix, x_prev, x_forecast,
                     P_forecast, P_forecast_inverse, UNC,
                     META)
-            
-            
             if n_iter > 1 and is_robust:
-                
                 # Mask out weird forecasts 
                 MASK = robust_inflation(n_bands, innovations, Y, UNC,
                         self.state_mask, tolerance=6.)
-            
-
-            # Test convergence. We calculate the l2 norm of the difference
-            # between the state at the previous iteration and the current one
-            # There might be better tests, but this is quite straightforward
-            #passer_mask = data.mask[self.state_mask]
-            #maska = np.concatenate([passer_mask.ravel()
-            #                        for i in range(self.n_params)])
-            #convergence_norm = np.linalg.norm(x_analysis[maska] -
-            #                                  x_prev[maska])/float(maska.sum())
-            convergence_norm = np.linalg.norm(x_analysis - x_prev)/float(len(x_analysis))
-            LOG.info(
-                "Iteration # {:d}, convergence norm: {:g}".format(
-                    n_iter, convergence_norm))
-            if (convergence_norm < convergence_tolerance) and (
-                    n_iter >= min_iterations):
-                # Converged!
-                LOG.info("Converged sensibly")
-                not_converged = False
-            elif previous_convergence < convergence_norm:
-                # Too many iterations
-                LOG.info("Diverging solution. Bailing out here")
-                # Return previous solution
-                LOG.info("--> Returning previous solution! :-0")
-                x_analysis = x_prev*1.
-                not_converged = False
-                
-            elif n_iter > 25:
-                # Too many iterations
-                LOG.warning("Bailing out after 25 iterations!!!!!!")
-                not_converged = False
-
+            # Check convergence 
+            retval = calculate_convergence_tests(x_analysis, x_prev, n_iter,
+                                                min_iterations, previous_convergence,
+                                                convergence_tolerance)
+            if len(retval) == 2:
+                not_converged, convergence_norm = retval
+            else:
+                # It's possible that we have diverged from the solution
+                # If so, return x_prev as x_analysis
+                not_converged, x_analysis, convergence_norm = retval
             # Update the linearisation point to the solution
             # after the current iteration...
             x_prev = x_analysis*1.
@@ -333,50 +384,40 @@ class LinearKalman (object):
             n_iter += 1
             
             INNOVATIONS = np.split(innovations, n_bands)
-            # Need to plot the goodness of fit somewhere...
-            import matplotlib.pyplot as plt
-            M = []
-            print(f"Iteration: {n_iter-1:d}")
-            for band in range(n_bands):
-                t = np.zeros_like(self.state_mask).astype(np.float)            
-                t[self.state_mask*MASK[band]] = INNOVATIONS[band]
-                M.append(t)
-                print(f"\tBand: {band:d}, {np.mean(INNOVATIONS[band]):f}")
-            print(f"Timestep {timestep.isoformat():s}")
-            print(f"\tavg TLAI: {x_analysis[6::10].mean():f}")
-            print(f"\tavg TCAB: {x_analysis[1::10].mean():f}")
-            print(f"\tavg N: {x_analysis[0::10].mean():f}")
-            plt.figure()
-            t = np.zeros_like(self.state_mask).astype(np.float)
-            t[self.state_mask] = -2*np.log(x_analysis[6::10])
-            plt.imshow(t, interpolation="nearest", vmin=0,
-                       vmax=5, cmap=plt.cm.inferno)
-            plt.title(f"{timestep.isoformat():s} Iter: {n_iter-1:d}")
-            plt.show()
-            import ipdb;ipdb.set_trace()
+            #### Need to plot the goodness of fit somewhere...
+            ###import matplotlib.pyplot as plt
+            ###M = []
+            ###print(f"Iteration: {n_iter-1:d}")
+            ###for band in range(n_bands):
+                ###t = np.zeros_like(self.state_mask).astype(np.float)            
+                ###t[self.state_mask*MASK[band]] = INNOVATIONS[band]
+                ###M.append(t)
+                ###print(f"\tBand: {band:d}, {np.mean(INNOVATIONS[band]):f}")
+            ###print(f"Timestep {timestep.isoformat():s}")
+            ###print(f"\tavg TLAI: {x_analysis[6::10].mean():f}")
+            ###print(f"\tavg TCAB: {x_analysis[1::10].mean():f}")
+            ###print(f"\tavg N: {x_analysis[0::10].mean():f}")
+            ###plt.figure()
+            ###t = np.zeros_like(self.state_mask).astype(np.float)
+            ###t[self.state_mask] = -2*np.log(x_analysis[6::10])
+            ###plt.imshow(t, interpolation="nearest", vmin=0,
+                       ###vmax=5, cmap=plt.cm.inferno)
+            ###plt.title(f"{timestep.isoformat():s} Iter: {n_iter-1:d}")
+            ####plt.figure()
+            ####t = np.zeros_like(self.state_mask).astype(np.float)
+            ####t[self.state_mask] = -100*np.log(x_analysis[1::10])
+            ####plt.imshow(t, interpolation="nearest", vmin=0,
+                       ####vmax=80, cmap=plt.cm.inferno)
+            ####plt.title(f"{timestep.isoformat():s} Iter: {n_iter-1:d}")
+
+            ###plt.show()
+            
             
 
         
         # Once we have converged...
         # Correct hessian for higher order terms
-        #split_points = [m.sum( ) for m in MASK]
-        
-        ###try:
-            #### SWitched off for time being
-            ###INNOVATIONS = np.split(innovations, n_bands)
-            #### Need to plot the goodness of fit somewhere...
-            ###M = []
-            ###for band in range(n_bands):
-                ###t = np.zeros_like(self.state_mask).astype(np.float)
-            
-                ###t[self.state_mask*MASK[band]] = INNOVATIONS[band]
-                ###M.append(t)
 
-            ###P_correction = hessian_correction_multiband(data.emulator, x_analysis,
-                                                    ###UNC, INNOVATIONS, MASK,
-                                                    ###self.state_mask, n_bands,
-                                                    ###self.n_params, self.band_mapper)
-        ###except TypeError:
         P_correction = 0. # ;)
         P_analysis_inverse = P_analysis_inverse - P_correction
         
@@ -389,13 +430,13 @@ class LinearKalman (object):
     def solver_multiband(self, observations, mask, H_matrix, x0, x_forecast, P_forecast,
                P_forecast_inv, R_mat, the_metadata):
         
-        x_analysis, P_analysis, P_analysis_inv, \
-            innovations_prime, fwd_modelled = \
-            variational_kalman_multiband(
-                observations, mask, self.state_mask, R_mat, H_matrix,
-                self.n_params, x0,
-                x_forecast, P_forecast, P_forecast_inv, the_metadata,
-                upper_bound=self.upper_bound, lower_bound=self.lower_bound)
+        x_analysis, P_analysis, P_analysis_inv, innovations_prime, fwd_modelled = \
+            variational_kalman_multiband(observations, mask, self.state_mask,
+                                         R_mat, H_matrix, self.n_params, x0,
+                                         x_forecast, P_forecast, P_forecast_inv,
+                                         the_metadata,
+                                         upper_bound=self.upper_bound,
+                                         lower_bound=self.lower_bound)
 
         return x_analysis, P_analysis, P_analysis_inv, \
             innovations_prime, fwd_modelled
