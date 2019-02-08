@@ -5,6 +5,9 @@
 import datetime
 import glob
 import os
+
+from functools import partial
+
 from collections import namedtuple
 
 import gdal
@@ -15,17 +18,31 @@ import osr
 
 import scipy.sparse as sp
 
+from ..observation_operators import sar_observation_operator
+
 WRONG_VALUE = -999.0  # TODO tentative missing value
 
 SARdata = namedtuple('SARdata',
                      'observations uncertainty mask metadata emulator')
 
-
+class Gp_Wrapper(object):
+    def __init__ (self, function):
+        self._function = function
+    
+    def predict(self, x, do_deriv=True, do_unc=False):
+        return self._function(self._function(x))
+        
+        
 def reproject_image(source_img, target_img, dstSRSs=None):
     """Reprojects/Warps an image to fit exactly another image.
     Additionally, you can set the destination SRS if you want
     to or if it isn't defined in the source image."""
-    g = gdal.Open(target_img)
+    try:
+        g = gdal.Open(target_img)
+    except RuntimeError:
+        if type(target_img) == gdal.Dataset:
+            g = target_img
+    
     geo_t = g.GetGeoTransform()
     x_size, y_size = g.RasterXSize, g.RasterYSize
     xmin = min(geo_t[0], geo_t[0] + x_size * geo_t[1])
@@ -52,7 +69,9 @@ class S1Observations(object):
     """
 
     def __init__(self, data_folder, state_mask,
-                 emulators={'VV': 'SOmething', 'VH': 'Other'}):
+                 emulators={'VV': partial(sar_observation_operator, polarisation="VV"),
+                            'VH': partial(sar_observation_operator, polarisation="VH")},
+                 chunk=None):
 
         """
 
@@ -60,6 +79,7 @@ class S1Observations(object):
         # 1. Find the files
         files = glob.glob(os.path.join(data_folder, '*.nc'))
         files.sort()
+        self.original_mask = state_mask
         self.state_mask = state_mask
         self.dates = []
         self.date_data = {}
@@ -77,10 +97,39 @@ class S1Observations(object):
         # 2. Store the emulator(s)
         self.emulators = emulators
         self.bands_per_observation = {}
+        self.chunk = chunk
         for the_date in self.dates:
             self.bands_per_observation[the_date] = 2 # 2 bands
 
+       
+        
+    def apply_roi(self, ulx, uly, lrx, lry):
+        self.ulx = ulx
+        self.uly = uly
+        self.lrx = lrx
+        self.lry = lry
+        width = lrx - ulx
+        height = uly - lry
+        
+        self.state_mask = gdal.Translate("", self.original_mask,
+                                         srcWin=[ulx, uly, width, abs(height)],
+                                         format="MEM")
+        
+    def define_output(self):
+        try:
+            g = gdal.Open(self.state_mask)
+            proj = g.GetProjection()
+            geoT = np.array(g.GetGeoTransform())
 
+        except:
+            proj = self.state_mask.GetProjection()
+            geoT = np.array(self.state_mask.GetGeoTransform())
+
+        #new_geoT = geoT*1.
+        #new_geoT[0] = new_geoT[0] + self.ulx*new_geoT[1]
+        #new_geoT[3] = new_geoT[3] + self.uly*new_geoT[5]
+        return proj, geoT.tolist() #new_geoT.tolist()
+    
     def _read_backscatter(self, obs_ptr):
         """
         Read backscatter from NetCDF4 File
@@ -119,7 +168,7 @@ class S1Observations(object):
         """
 
         # first approximation of uncertainty (1 dB)
-        unc = backscatter*0.05
+        unc = backscatter*0.1
 
 
         # need to find a good way to calculate ENL
@@ -183,13 +232,18 @@ class S1Observations(object):
         R_mat_sp.setdiag(1./(R_mat.ravel())**2)
         R_mat_sp = R_mat_sp.tocsr()
 
-        emulator = self.emulators[polarisation]
+        
         # TODO read in angle of incidence from netcdf file
         # metadata['incidence_angle_deg'] =
         fname = 'NETCDF:"{:s}":{:s}'.format(this_file, "theta")
         obs_ptr = reproject_image(fname, self.state_mask)
         metadata = {'incidence_angle': obs_ptr.ReadAsArray()}
-        sardata = SARdata(observations, R_mat_sp, mask, metadata, emulator)
+        #emulator = partial(self.emulators[polarisation],
+        #                   theta=metadata["incidence_angle"],
+        #                   polarisation=polarisation)
+        #emu_wrapper = Gp_Wrapper(emulator)
+        sardata = SARdata(observations, R_mat_sp, mask, metadata,
+                          sar_observation_operator)
         return sardata
 
 

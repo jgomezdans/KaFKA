@@ -62,6 +62,46 @@ def iterate_time_grid(time_grid, the_dates):
             yield timestep, locate_times, False
 
 
+def run_emulator_NEW(gp, x, tol=None):
+    # We select the unique values in vector x
+    # Note that we could have done this using e.g. a histogram
+    # or some other method to select solutions "close enough"
+    unique_vectors, unique_indices, unique_inverse = np.unique(
+        x, axis=0, return_index=True, return_inverse=True)
+    if len(unique_vectors) == 1:  # Prior!
+        cluster_labels = np.zeros(x.shape[0], dtype=np.int16)
+    elif len(unique_vectors) > 1e6:
+
+        LOG.info("Clustering parameter space")
+        mean = np.mean(x, axis=0)  # 7 dimensions
+        cov = np.cov(x, rowvar=0)  # 4 x 4 dimensions
+        # Draw a 300 element LUT
+        unique_vectors = np.random.multivariate_normal(mean, cov,
+                                                       5000)
+        # Assign each element of x to a LUT/cluster entry
+        cluster_labels = locate_in_lut(unique_vectors, x)
+    # Runs emulator for emulation subset
+    prediction = gp.predict(unique_vectors, do_unc=False)
+    if len(prediction) == 2:
+        H_, dH_ = prediction
+    else:
+        H_, _, dH_ = prediction
+
+    H = np.zeros(x.shape[0])
+    dH = np.zeros_like(x)
+    if 'cluster_labels' in locals():
+        nclust = cluster_labels.shape
+        for label in np.unique(cluster_labels):
+            H[cluster_labels == label] = H_[label]
+            dH[cluster_labels == label, :] = dH_[label, :]
+        return H, dH
+    H[unique_indices] = H_
+    H = H[unique_inverse]
+    dH[unique_indices] = dH_
+    dH = dH[unique_inverse]
+    return H, dH
+
+
 def run_emulator(gp, x, tol=None):
     # We select the unique values in vector x
     # Note that we could have done this using e.g. a histogram
@@ -96,26 +136,11 @@ def run_emulator(gp, x, tol=None):
             H[cluster_labels == label] = H_[label]
             dH[cluster_labels == label, :] = dH_[label, :]
         return H, dH
-    H[unique_indices] = H_
-    H = H[unique_inverse]
-    dH[unique_indices] = dH_
-    dH = dH[unique_inverse]
-    return H, dH
 
-    ##try:
-        ##nclust = cluster_labels.shape
-    ##except NameError:
-        ##for i, uniq in enumerate(unique_vectors):
-            ##passer = np.all(x == uniq, axis=1)
-            ##H[passer] = H_[i]
-            ##dH[passer, :] = dH_[i, :]
-        ##return H, dH
-
-    ##for label in np.unique(cluster_labels):
-        ##H[cluster_labels == label] = H_[label]
-        ##dH[cluster_labels == label, :] = dH_[label, :]
-    ##return H, dH
-
+    for label in np.unique(cluster_labels):
+        H[cluster_labels == label] = H_[label]
+        dH[cluster_labels == label, :] = dH_[label, :]
+    return H, dH    
 
 def create_uncertainty(uncertainty, mask):
     """Creates the observational uncertainty matrix. We assume that
@@ -202,13 +227,19 @@ def create_nonlinear_observation_operator(n_params, emulator, metadata,
     ####print(np.allclose(H_matrix.todense(), H_matrix_FAST.todense()))
     ####print("Matrices are equivalent!")
     LOG.info("\tDone!")
+    if hasattr(emulator, "hessian"):
+        calc_hess = True
+    else:
+        calc_hess = False
 
+    
     return (H0, H_matrix_FAST.tocsr())
 
 
-
 def create_prosail_observation_operator(n_params, emulator, metadata,
-                                          mask, state_mask,  x_forecast, band):
+                                          mask, state_mask,  x_forecast,
+                                          band, calc_hess=False, 
+                                          band_mapper=None):
     """Using an emulator of the nonlinear model around `x_forecast`.
     This case is quite special, as I'm focusing on a BHR SAIL
     version (or the JRC TIP), which have spectral parameters
@@ -245,7 +276,19 @@ def create_prosail_observation_operator(n_params, emulator, metadata,
 
     LOG.info("\tDone!")
 
-    return (H0, H_matrix.tocsr())
+    if calc_hess:
+        hess = np.zeros((n_times, n_params, n_params),
+                             dtype=np.float32)
+        hess_ = emulator.hessian(x0[mask[state_mask]])
+
+        n = 0
+        for i, m in enumerate(mask[state_mask].flatten()):
+            if m:
+                hess[i, ...] = hess_[n]
+                n += 1
+
+    return (H0, H_matrix.tocsr(), hess) if calc_hess \
+                                        else (H0, H_matrix.tocsr())
 
 
 

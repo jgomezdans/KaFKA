@@ -51,11 +51,12 @@ def sar_observation_operator(x, theta, polarisation):
     # conversion of incidence angle to radiant
     # the incidence angle itself should probably implemented in x)
     # TODO needs to come from the data
-    theta = np.deg2rad(theta)
+    theta = np.deg2rad(theta.mean())
 
     # Simpler definition of cosine of theta
+    # Averaged over scene.
     mu = np.cos(theta)
-
+    
     # the model parameters (A, B, C, D, E) for different polarisations
     parameters = {'VV': [0.0846, 0.0615, -14.8465, 15.907, 1.],
                   'VH': [0.0795, 0.1464, -14.8332, 15.907, 0.]}
@@ -76,7 +77,7 @@ def sar_observation_operator(x, theta, polarisation):
     sigma_surf = 10. ** ((C + D * x[:, 1]) / 10.)
 
     sigma_0 = sigma_veg + tau * sigma_surf
-    #pdb.set_trace()
+
 
     # Calculate Gradient (grad has same dimension as x)
     grad = x*0
@@ -88,12 +89,12 @@ def sar_observation_operator(x, theta, polarisation):
         z1 = np.power(x[i, 0], E-1.)
         if np.isnan(z1):
             z1 = 1.
-        tau_value = np.exp(-2. * B / mu[i] * x[i, 0])
-        grad[i, 0] = A * E * mu[i] * z1 * (1. - tau_value) + \
+        tau_value = np.exp(-2. * B / mu * x[i, 0])
+        grad[i, 0] = A * E * mu * z1 * (1. - tau_value) + \
             2. * A * B * z * tau_value - (
             (2. ** (1/10. * (C + D * x[i, 1]) + 1.)) *
             (5. ** (1/10. * (C + D * x[i, 1])) * B * tau_value)
-            ) / mu[i]
+            ) / mu
         grad[i, 1] = D * np.log(10.) * tau_value * 10. ** (
             1./10. * (C + D * x[i, 1]) - 1.)
 
@@ -107,7 +108,8 @@ def sar_observation_operator(x, theta, polarisation):
 
 
 def create_sar_observation_operator(n_params, forward_model, metadata,
-                                    mask, state_mask,  x_forecast, band):
+                                    mask, state_mask,  x_forecast, band,
+                                    band_mapper=None):
     """Creates the SAR observation operator using the Water Cloud SAR forward
     model (defined above).
 
@@ -134,7 +136,7 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     H0, dH
     """
     LOG.info("Creating the ObsOp for band %d" % band)
-    n_times = x_forecast.shape[0] / n_params
+    n_times = x_forecast.shape[0] // n_params
     # good_obs = mask.sum()
     H_matrix = sp.lil_matrix((n_times, n_params * n_times),
                              dtype=np.float32)
@@ -150,9 +152,10 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     # This loop can be JIT'ed
     x0 = np.zeros((n_times, n_params))
     theta = np.zeros((n_times))
+    state_mapper = np.arange(n_params, dtype=np.int16)
     for i, m in enumerate(mask[state_mask].flatten()):
         if m:
-            x0[i, :] = x_forecast[(n_params * i): (n_params*(i+1))]
+            x0[i, :] = x_forecast[(n_params*i) + state_mapper]
             theta[i] = 23.#metadata['incidence_angle']
     LOG.info("Running SAR forward model")
     # Calls the run_emulator method that only does different vectors
@@ -166,7 +169,7 @@ def create_sar_observation_operator(n_params, forward_model, metadata,
     
     for i, m in enumerate(mask[state_mask].flatten()):
         if m:
-            H_matrix[i, (n_params * i): (n_params*(i+1))] = dH[n]
+            H_matrix[i, state_mapper + n_params * i] = dH[n]
             H0[i] = H0_[n]
             n += 1
     LOG.info("\tDone!")

@@ -14,6 +14,9 @@ from kafka.inference import block_diag
 from kafka import Sentinel2Observations
 from kafka import NoPropagator, IdentityPropagator
 from kafka import kafka_inference
+from kafka.observation_operators import create_sar_observation_operator
+from kafka.inference import create_nonlinear_observation_operator
+
 
 class SAILPrior(object):
     def __init__ (self, parameter_list, state_mask):
@@ -120,4 +123,5 @@ if __name__ == "__main__":
     output_files = kafka_inference(state_mask, time_grid, parameter_list,
                     s2_observations, prior, state_propagator,
                     "/data/selene/ucfajlg/tmp_prop/", None, None,
+                    create_nonlinear_observation_operator,
                     chunk_size=[128, 128])

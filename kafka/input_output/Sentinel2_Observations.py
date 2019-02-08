@@ -106,7 +106,7 @@ class Sentinel2Observations(object):
         self.state_mask = state_mask
         self._find_granules(self.parent)
         self.band_map = ['02', '03', '04', '05', '06', '07',
-                         '08', '8A', '11', '12']
+                              '08', '12']
         emulators = glob.glob(os.path.join(self.emulator_folder, "*.pkl"))
         emulators.sort()
         self.emulator_files = emulators
@@ -143,10 +143,15 @@ class Sentinel2Observations(object):
     def _find_granules(self, parent_folder):
         """Finds granules. Currently does so by checking for
         Feng's AOT file."""
-        
-        test_files = [f for f in parent_folder.rglob("*/aot.tif")]
-        self.dates = [ datetime.datetime(*(list(map(int, f.parts[-5:-2]))))
-                 for f in test_files]
+        # this is needed to follow symlinks
+        test_files = [x for f in parent_folder.iterdir() 
+                      for x in f.rglob("**/*_aot.tif") ]
+        try:
+            self.dates = [ datetime.datetime(*(list(map(int, f.parts[-5:-2]))))
+                    for f in test_files]
+        except ValueError:
+            self.dates = [datetime.datetime.strptime(f.parts[-1].split(
+                "_")[1], "%Y%m%dT%H%M%S") for f in test_files]
         self.date_data = dict(zip(self.dates, [f.parent for f in test_files]))
         self.bands_per_observation = {}
         LOG.info(f"Found {len(test_files):d} S2 granules")
@@ -154,7 +159,7 @@ class Sentinel2Observations(object):
         LOG.info(f"Last granule: {sorted(self.dates)[-1].strftime('%Y-%m-%d'):s}")
                               
         for the_date in self.dates:
-            self.bands_per_observation[the_date] = 10 # 10 bands
+            self.bands_per_observation[the_date] = 8 # 10m +redEdgebands
 
 
     def _find_emulator(self, sza, saa, vza, vaa):
@@ -176,15 +181,18 @@ class Sentinel2Observations(object):
     def get_band_data(self, timestep, band):
         
         current_folder = self.date_data[timestep]
-
-        meta_file = os.path.join(current_folder, "metadata.xml")
+        
+        meta_file = current_folder.parent / "MTD_TL.xml"
+        if not meta_file.exists():
+            "Cant find metadat file!"
         sza, saa, vza, vaa = parse_xml(meta_file)
         metadata = dict (zip(["sza", "saa", "vza", "vaa"],
                             [sza, saa, vza, vaa]))
         # This should be really using EmulatorEngine...
         emulator_file = self._find_emulator(sza, saa, vza, vaa)
         emulator = cPickle.load(open(emulator_file, 'rb'),
-                                 encoding='latin1' )
+                                 encoding='latin1')
+        
         # emulator is a dictionary with keys 
         # [b'S2A_MSI_09', b'S2A_MSI_08', b'S2A_MSI_05', 
         # b'S2A_MSI_04', b'S2A_MSI_07', b'S2A_MSI_06', 
@@ -193,13 +201,15 @@ class Sentinel2Observations(object):
 
         # Read and reproject S2 surface reflectance
         the_band = self.band_map[band]
-        original_s2_file = current_folder/f"B{the_band:s}_sur.tif"
+        fname_prefix = [f.name.split("B02")[0]
+                        for f in current_folder.glob("*B02_sur.tif")][0]
+        original_s2_file = current_folder/f"{fname_prefix:s}B{the_band:s}_sur.tif"
         LOG.info(f"Original file {str(original_s2_file):s}")
         g = reproject_image(str(original_s2_file),
                             self.state_mask)
         
         rho_surface = g.ReadAsArray()
-        cloud_mask = current_folder/f"cloud.tif"
+        cloud_mask = current_folder.parent/f"cloud.tif"
         g = reproject_image(str(cloud_mask),
                             self.state_mask)
         cloud_mask = g.ReadAsArray()
@@ -209,10 +219,17 @@ class Sentinel2Observations(object):
                  f"({100.*mask.sum()/np.prod(mask.shape):f}%)")
         rho_surface = np.where(mask, rho_surface/10000., 0)
         # Read and reproject S2 angles
-        emulator_band_map = [2, 3, 4, 5, 6, 7, 8, 9, 12, 13]
         
+        #emulator_band_map = [2, 3, 4, 5, 6, 7, 8, 9, 12]
+        #emulator_band_map = [2, 3, 4, 5, 6, 7, 8]
         
-        R_mat = rho_surface*0.01
+        band_dictionary = {'02':2, '03': 3, '04': 4, '05': 5, '06': 6, '07':7, '08': 8, '8A': 9, '09': 10, '11': 12, '12': 13}
+        
+        emulator_band_map = []
+        for i in self.band_map:
+            emulator_band_map.append(band_dictionary[i])
+        
+        R_mat = rho_surface*0.05# + self.band_unc[band]
         R_mat[np.logical_not(mask)] = 0.
         N = mask.ravel().shape[0]
         main_diag = 1./(R_mat.ravel())**2
@@ -223,7 +240,7 @@ class Sentinel2Observations(object):
 
         s2_band = bytes("S2A_MSI_{:02d}".format(
                         emulator_band_map[band]), 'latin1' )
-
+        print(">>>", original_s2_file, emulator_file, s2_band)
         s2data = S2MSIdata (rho_surface, R_mat_sp, mask, metadata, emulator[s2_band] )
 
         return s2data
