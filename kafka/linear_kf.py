@@ -21,6 +21,9 @@ implementation basically performs a very fast update of the filter."""
 # along with KaFKA.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
+
+from functools import partial
+
 from collections import namedtuple
 
 import numpy as np
@@ -44,7 +47,7 @@ from .inference import non_linear_solver
 
 from .state_propagation import forward_state_propagation
 
-
+from .parmap import parmap
 
 # Set up logging
 
@@ -302,12 +305,23 @@ class LinearKalman (object):
         for step in locate_times:
             print("Assimilating %s..." % step.strftime("%Y-%m-%d"))
             LOG.info("Assimilating %s..." % step.strftime("%Y-%m-%d"))
-            current_data = []
-            # Reads all bands into one list
-            for band in range(self.observations.bands_per_observation[step]):
-                current_data.append(self.observations.get_band_data(step, 
-                                                                    band))
+            ###import time
+            ###toc = time.clock()
+            ####grab_data = partial (self.observations.get_band_data, timestep=step)
+            grab_data = lambda b: self.observations.get_band_data(step, b)
+            the_bands = range(self.observations.bands_per_observation[step])
+            current_data = list(parmap(grab_data, the_bands, Nt=len(the_bands),
+                                       ordered=True))
+            ####print(time.clock() - toc, "Seconds")
+            ####current_data2 = []
+            ##### Reads all bands into one list
+            ####toc = time.clock()
 
+            ####for band in range(self.observations.bands_per_observation[step]):
+                ####current_data2.append(self.observations.get_band_data(step, 
+                                                                    ####band))
+            ####print(time.clock() - toc, "Seconds")
+            ####import ipdb;ipdb.set_trace()
             x_analysis, P_analysis, P_analysis_inverse, innovations = \
                 self.do_all_bands(step, current_data, x_forecast, P_forecast,
                                   P_forecast_inverse, is_robust=is_robust)
