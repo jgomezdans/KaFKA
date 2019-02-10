@@ -326,7 +326,7 @@ class LinearKalman (object):
 
     def do_all_bands(self, timestep, current_data, x_forecast, P_forecast,
                         P_forecast_inverse, convergence_tolerance=1e-3,
-                        min_iterations=3, is_robust=False):
+                        min_iterations=5, is_robust=False):
         not_converged = True
         # Linearisation point is set to x_forecast for first iteration
         x_prev = x_forecast*1.
