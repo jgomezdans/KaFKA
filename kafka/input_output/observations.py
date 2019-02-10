@@ -57,6 +57,8 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.ndimage import zoom
 
+from kafka.parmap import parmap
+
 os.environ['HDF5_DISABLE_VERSION_CHECK'] = '1'
 
 __author__ = "J Gomez-Dans"
@@ -353,8 +355,9 @@ class KafkaOutput(object):
     def dump_data(self, timestep, x_analysis, P_analysis, P_analysis_inv,
                   state_mask, n_params):
         
-        drv = gdal.GetDriverByName(self.fmt)
-        for ii, param in enumerate(self.parameter_list):
+        def write_data(inx):
+            ii, param = inx
+            drv = gdal.GetDriverByName(self.fmt)
             if self.prefix is None:
                 fname = os.path.join(self.folder, "%s_%s.tif" %
                                     (param, timestep.strftime("A%Y%j")))
@@ -373,8 +376,12 @@ class KafkaOutput(object):
             A = np.zeros(state_mask.shape, dtype=np.float32)
             A[state_mask] = x_analysis[ii::n_params]
             dst_ds.GetRasterBand(1).WriteArray(A)
+        par_list = [(ii, param) 
+                            for (ii, param) in enumerate(self.parameter_list)]
+        retval = list(parmap(write_data, par_list, Nt=len(self.parameter_list)))
             
         LOG.info("Saving posterior inverse covariance matrix")
+        # Proabably also save the state...
         sp.save_npz(os.path.join(
                     self.folder,
                     f"P_analysis_inv_{timestep.strftime('A%Y%j'):s}.npz"),
@@ -384,7 +391,8 @@ class KafkaOutput(object):
         bothered = False
         LOG.info("Not saving uncertainties")
         if bothered:
-            for ii, param in enumerate(self.parameter_list):
+            def write_unc(inx):
+                ii, param = inx
                 if self.prefix is None:
                     fname = os.path.join(self.folder, "%s_%s_unc.tif" %
                                         (param, timestep.strftime("A%Y%j")))
@@ -402,7 +410,8 @@ class KafkaOutput(object):
                 A = np.zeros(state_mask.shape, dtype=np.float32)
                 A[state_mask] = 1./np.sqrt(P_analysis_inv.diagonal()[ii::n_params])
                 dst_ds.GetRasterBand(1).WriteArray(A)
-                LOG.info(f"Saved state to {fname:s}")
+            retval = list(parmap(write_unc, par_list, Nt=len(self.parameter_list)))
+
         
 
 if __name__ == "__main__":

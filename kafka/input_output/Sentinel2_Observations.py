@@ -179,9 +179,9 @@ class Sentinel2Observations(object):
 
 
     def get_band_data(self, timestep, band):
+        """Retrieves observations and so on for one date."""
         
         current_folder = self.date_data[timestep]
-        
         meta_file = current_folder.parent / "MTD_TL.xml"
         if not meta_file.exists():
             "Cant find metadat file!"
@@ -230,9 +230,8 @@ class Sentinel2Observations(object):
                            '8A': 9, '09': 10, 
                            '11': 12, '12': 13}
         
-        emulator_band_map = []
-        for i in self.band_map:
-            emulator_band_map.append(band_dictionary[i])
+        emulator_band_map = [band_dictionary[i]
+                             for i in self.band_map]
         
         R_mat = rho_surface*0.05# + self.band_unc[band]
         R_mat[np.logical_not(mask)] = 0.
@@ -246,7 +245,6 @@ class Sentinel2Observations(object):
         
         s2data = S2MSIdata (rho_surface, R_mat_sp, mask,
                             metadata, emulator[s2_band] )
-
         return s2data
 
 
