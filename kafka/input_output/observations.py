@@ -382,10 +382,13 @@ class KafkaOutput(object):
             
         LOG.info("Saving posterior inverse covariance matrix")
         # Proabably also save the state...
+        # And the propagation matrix, unless it's just feasible to
+        # reconstruct it elsewhere
         sp.save_npz(os.path.join(
                     self.folder,
                     f"P_analysis_inv_{timestep.strftime('A%Y%j'):s}.npz"),
-                    P_analysis_inv)
+                    P_analysis_inv=P_analysis_inv,
+                    x_analysis=x_analysis)
         # Probably need to save state mask and other things to "unwrap"
         # the matrix, such as parameters and so on
         bothered = False
