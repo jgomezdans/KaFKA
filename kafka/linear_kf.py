@@ -311,7 +311,7 @@ class LinearKalman (object):
             grab_data = lambda b: self.observations.get_band_data(step, b)
             the_bands = range(self.observations.bands_per_observation[step])
             current_data = list(parmap(grab_data, the_bands, Nt=len(the_bands),
-                                       ordered=True))
+                                       ordered=True, daemon=True))
             ####print(time.clock() - toc, "Seconds")
             ####current_data2 = []
             ##### Reads all bands into one list
@@ -340,7 +340,7 @@ class LinearKalman (object):
 
     def do_all_bands(self, timestep, current_data, x_forecast, P_forecast,
                         P_forecast_inverse, convergence_tolerance=1e-3,
-                        min_iterations=5, is_robust=False):
+                        min_iterations=3, is_robust=False):
         not_converged = True
         # Linearisation point is set to x_forecast for first iteration
         x_prev = x_forecast*1.
