@@ -387,7 +387,10 @@ class KafkaOutput(object):
         sp.save_npz(os.path.join(
                     self.folder,
                     f"P_analysis_inv_{timestep.strftime('A%Y%j'):s}.npz"),
-                    P_analysis_inv=P_analysis_inv,
+                    P_analysis_inv)
+        np.savez_compressed(os.path.join(
+                    self.folder,
+                    f"x_analysis_{timestep.strftime('A%Y%j'):s}.npz")
                     x_analysis=x_analysis)
         # Probably need to save state mask and other things to "unwrap"
         # the matrix, such as parameters and so on
