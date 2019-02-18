@@ -99,14 +99,15 @@ class Sentinel2Observations(object):
         if not emulator_folder.exists():
             LOG.info(f"Emulator folder: {emulator_folder}")
             raise IOError("Emulator folder doesn't exist")
+
+        self.band_map = ['02', '03', '04', '05', '06', '07',
+                              '08', '12']
         
         self.parent = parent_folder
         self.emulator_folder = emulator_folder
         self.original_mask = state_mask
         self.state_mask = state_mask
         self._find_granules(self.parent)
-        self.band_map = ['02', '03', '04', '05', '06', '07',
-                              '08', '12']
         emulators = glob.glob(os.path.join(self.emulator_folder, "*.pkl"))
         emulators.sort()
         self.emulator_files = emulators
@@ -159,7 +160,7 @@ class Sentinel2Observations(object):
         LOG.info(f"Last granule: {sorted(self.dates)[-1].strftime('%Y-%m-%d'):s}")
                               
         for the_date in self.dates:
-            self.bands_per_observation[the_date] = 8 # 10m +redEdgebands
+            self.bands_per_observation[the_date] = len(self.band_map) # 10m +redEdgebands
 
 
     def _find_emulator(self, sza, saa, vza, vaa):
@@ -246,11 +247,46 @@ class Sentinel2Observations(object):
         s2data = S2MSIdata (rho_surface, R_mat_sp, mask,
                             metadata, emulator[s2_band] )
         return s2data
+    
+    
+class Sentinel2ObservationsSyntheticYear(Sentinel2Observations):
+    def __init__(self, parent_folder, emulator_folder, state_mask,
+                 chunk=None, synthetic_year=2018):
+        self.synthetic_year = synthetic_year        
+        Sentinel2Observations.__init__(self, parent_folder, emulator_folder,
+                                       state_mask, chunk=chunk)
+        
+
+        
+    def _find_granules(self, parent_folder):
+        """Finds granules. Currently does so by checking for
+        Feng's AOT file."""
+        # this is needed to follow symlinks
+        LOG.info(f"IMPORTANT!!!! All observations appear to " + 
+                 f"take place in {self.synthetic_year:d}!")
+        test_files = [x for f in parent_folder.iterdir() 
+                      for x in f.rglob("**/*_aot.tif") ]
+        try:
+            self.dates = [ datetime.datetime(*(list(map(int, f.parts[-5:-2])))).replace(year=self.synthetic_year)
+                    for f in test_files]
+        except ValueError:
+            self.dates = [datetime.datetime.strptime(f.parts[-1].split(
+                "_")[1], "%Y%m%dT%H%M%S").replace(year=self.synthetic_year)
+            for f in test_files]
+        self.date_data = dict(zip(self.dates, [f.parent for f in test_files]))
+        self.bands_per_observation = {}
+        LOG.info(f"Found {len(test_files):d} S2 granules")
+        LOG.info(f"First granule: {sorted(self.dates)[0].strftime('%Y-%m-%d'):s}")
+        LOG.info(f"Last granule: {sorted(self.dates)[-1].strftime('%Y-%m-%d'):s}")
+        
+                              
+        for the_date in self.dates:
+            self.bands_per_observation[the_date] = len(self.band_map)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    obs = Sentinel2Observations("/home/ucfafyi/public_html/S2_data/32/U/PU/",
+    obs = Sentinel2ObservationsSyntheticYear("/home/ucfafyi/public_html/S2_data/32/U/PU/",
            "/home/ucfafyi/DATA/Multiply/emus/sail/",
            "./ESU.tif")
     for timestep in obs.dates:
