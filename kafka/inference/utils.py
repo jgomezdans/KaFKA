@@ -41,13 +41,28 @@ LOG = logging.getLogger(__name__)
 def iterate_time_grid(time_grid, the_dates):
     is_first = True
     istart_date = time_grid[0]
+    if (time_grid[0] - time_grid[1]) > dt.timedelta(0):
+        back=True
+    else:
+        back=False
     for ii, timestep in enumerate(time_grid[1:]):
         # First locate all available observations for time step of interest.
         # Note that there could be more than one...
-        locate_times_idx = np.where(np.logical_and(
-            np.array(the_dates) >= istart_date,
-            np.array(the_dates) < timestep), True, False)
+        
+        if back:
+            locate_times_idx = np.where(np.logical_and(
+                np.array(the_dates) >= timestep,
+                np.array(the_dates) < istart_date), True, False)
+        else:
+            locate_times_idx = np.where(np.logical_and(
+                np.array(the_dates) >= istart_date,
+                np.array(the_dates) < timestep), True, False)
         locate_times = np.array(the_dates)[locate_times_idx]
+        print("Doing timestep from {} -> {}".format(
+                istart_date.strftime("%Y-%m-%d"),
+                timestep.strftime("%Y-%m-%d")))
+        print("# of Observations: %d" % len(locate_times))
+
         LOG.info("Doing timestep from {} -> {}".format(
                 istart_date.strftime("%Y-%m-%d"),
                 timestep.strftime("%Y-%m-%d")))

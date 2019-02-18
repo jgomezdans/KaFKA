@@ -262,7 +262,9 @@ class LinearKalman (object):
         values for the state and covariance (or inverse covariance) matrices.
 
         The time_grid ought to be a list with the time steps given in the same
-        form as self.observation_times"""
+        format as self.observation_times. `time_grid` can either be monotonically
+        increasing (forward mode) or monotonically decreasing (backward mode)."""
+        
         for timestep, locate_times, is_first in iterate_time_grid(
             time_grid, self.observations.dates):
 
