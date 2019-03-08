@@ -89,7 +89,9 @@ S2MSIdata = namedtuple('S2MSIdata',
                      'observations uncertainty mask metadata emulator')
 
 class Sentinel2Observations(object):
-    def __init__(self, parent_folder, emulator_folder, state_mask, chunk=None):
+    def __init__(self, parent_folder, emulator_folder, state_mask,
+                 chunk=None, cloud_pct_threshold=20):
+
         parent_folder = Path(parent_folder)
         emulator_folder = Path(emulator_folder)
         if not parent_folder.exists():
@@ -107,6 +109,7 @@ class Sentinel2Observations(object):
         self.emulator_folder = emulator_folder
         self.original_mask = state_mask
         self.state_mask = state_mask
+        self.cloud_pct_threshold = cloud_pct_threshold
         self._find_granules(self.parent)
         emulators = glob.glob(os.path.join(self.emulator_folder, "*.pkl"))
         emulators.sort()
@@ -140,19 +143,51 @@ class Sentinel2Observations(object):
         #new_geoT[3] = new_geoT[3] + self.uly*new_geoT[5]
         return proj, geoT.tolist() #new_geoT.tolist()
 
+    def _cloud_filter(self, cloud_files, fill_value=-256):
+        """Remove from the cloud files list those files where
+        cloud coverage is above cloud_pct_threshold.
+        cloud.tif is a byte data type raster with cloud
+        coverage from 1 - 100, NoData is -256."""
+        #TODO Check fill value, it cannot be negative for
+        # a Byte data type
+        for cloud_file in cloud_files:
+            g = reproject_image(str(cloud_file), self.state_mask)
+            cloud_coverage = g.GetRasterBand(1).ReadAsArray()
+            # Mask No Data
+            cloud_coverage = np.ma.masked_equal(cloud_coverage, fill_value)
+            # Percentage of image with No Data
+            no_data_coverage = (cloud_coverage == fill_value).sum() * 100
+            no_data_coverage /= g.RasterXSize * g.RasterYSize
+
+            if cloud_coverage.mean() > self.cloud_pct_threshold or \
+               no_data_coverage > 80:
+                cloud_files.remove(cloud_file)
+
+        return cloud_files
 
     def _find_granules(self, parent_folder):
         """Finds granules. Currently does so by checking for
         Feng's AOT file."""
+        cloud_files = [x for f in parent_folder.iterdir()
+                       for x in f.rglob("*/cloud.tif")]
+
+        # Filter by cloud percentage coverage for the ROI
+        cloud_files = self._cloud_filter(cloud_files)
+
+        # Get AOT files only for images that passed the cloud filter
+        test_files = [x for f in cloud_files
+                      for x in f.parents[0].rglob("*/*_aot.tif")]
+
         # this is needed to follow symlinks
-        test_files = [x for f in parent_folder.iterdir() 
-                      for x in f.rglob("**/*_aot.tif") ]
+        #test_files = [x for f in parent_folder.iterdir() 
+        #              for x in f.rglob("**/*_aot.tif") ]
         try:
             self.dates = [ datetime.datetime(*(list(map(int, f.parts[-5:-2]))))
                     for f in test_files]
         except ValueError:
             self.dates = [datetime.datetime.strptime(f.parts[-1].split(
                 "_")[1], "%Y%m%dT%H%M%S") for f in test_files]
+
         self.date_data = dict(zip(self.dates, [f.parent for f in test_files]))
         self.bands_per_observation = {}
         LOG.info(f"Found {len(test_files):d} S2 granules")
@@ -161,7 +196,6 @@ class Sentinel2Observations(object):
                               
         for the_date in self.dates:
             self.bands_per_observation[the_date] = len(self.band_map) # 10m +redEdgebands
-
 
     def _find_emulator(self, sza, saa, vza, vaa):
         LOG.info("Emulator library code needs updating....")
@@ -286,8 +320,13 @@ class Sentinel2ObservationsSyntheticYear(Sentinel2Observations):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    obs = Sentinel2ObservationsSyntheticYear("/home/ucfafyi/public_html/S2_data/32/U/PU/",
-           "/home/ucfafyi/DATA/Multiply/emus/sail/",
-           "./ESU.tif")
-    for timestep in obs.dates:
-        retval = obs.get_band_data(timestep, 0)
+    s2_observations = Sentinel2Observations(
+        "/home/ucfajlg/Data/python/KaFKA_Validation/LMU/s2_obs/",
+        "/home/ucfafyi/DATA/Multiply/emus/sail/",
+        "/home/ucfajlg/Data/python/KaFKA_Validation/LMU/carto/MNI_2017.tif")
+
+    #obs = Sentinel2ObservationsSyntheticYear("/home/ucfafyi/public_html/S2_data/32/U/PU/",
+    #       "/home/ucfafyi/DATA/Multiply/emus/sail/",
+    #       "./ESU.tif")
+    #for timestep in obs.dates:
+    #    retval = obs.get_band_data(timestep, 0)
